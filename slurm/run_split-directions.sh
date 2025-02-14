@@ -42,15 +42,15 @@ else
 fi
 PROCDIR=${DATA_DIR}/processing
 OUTDIR=${PROCDIR}/${CATOUTDIR}
-WORKDIR=${SCRATCH_DIR}/${OBSID}/workdir
+WORKDIR=${OUTDIR}/workdir
 OUTPUT=${OUTDIR}
 JOBSTORE=${OUTDIR}/jobstore
-TMPD=${WORKDIR}/tmp
+TMPD=${OUTDIR}/tmp
 LOGSDIR=${OUTDIR}/logs
-mkdir -p ${WORKDIR}
 mkdir -p ${TMPD}
 mkdir -p ${TMPD}_interim
 mkdir -p ${LOGSDIR}
+mkdir -p ${WORKDIR}
 
 ## location of LINC
 LINC_DATA_ROOT=${LINCDIR}
