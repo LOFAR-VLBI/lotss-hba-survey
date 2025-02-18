@@ -81,7 +81,7 @@ def collect_solutions_lhr( caldir ):
     calibrator_id = fld[0]['calibrator_id']
 
     ## check if linc/prefactor 3 has been run
-    linc_check, macname = get_linc( obsid, caldir )    
+    linc_check, macname = get_linc_inputs( obsid, caldir )    
     if linc_check: 
         tasklist.append('setup')
         tasklist.append('concatenate-flag')
@@ -140,7 +140,7 @@ def collect_solutions( caldir ):
     calibrator_id = fld[0]['calibrator_id']
 
     ## check if linc/prefactor 3 has been run - for calibrator solutions - which are contained in LINC-target_solutions.h5
-    linc_check, macname = get_linc( obsid, caldir )
+    linc_check, macname = get_linc_inputs( obsid, caldir )
 
     ## download previous ddfpipeline for re-running
     templatedir = os.path.join(caldir,'ddfpipeline/template')
