@@ -26,7 +26,7 @@ export TOIL_CHECK_ENV=True
 #################################################################################
 ## IN GENERAL DO NOT TOUCH ANYTHING BELOW HERE
 
-DATADIR=${DATA_DIR}/${OBSID}/setup
+DATADIR=${DATA_DIR}/${OBSID}/HBA_target_VLBI/results
 PROCDIR=${DATA_DIR}/processing
 OUTDIR=${PROCDIR}/${OBSID}
 WORKDIR=${SCRATCH_DIR}/${OBSID}/workdir
@@ -56,7 +56,7 @@ export APPTAINERENV_PYTHONPATH=${VLBIDIR}/scripts:${LINCDIR}/scripts:\$PYTHONPAT
 cd ${OUTDIR}
 
 ## list of measurement sets - THIS WILL NEED TO BE CHECKED
-apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py VLBI concatenate-flag --linc ${LINCDIR} --aoflagger_memory_fraction 20 ${DATADIR}/ >> create_ms_list.log 2>&1
+apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py VLBI concatenate-flag --linc ${LINCDIR} --aoflagger_memory_fraction 20 --ms_suffix .ms ${DATADIR}/ >> create_ms_list.log 2>&1
 
 echo LINC starting
 TMPID=`echo ${OBSID} | cut -d'/' -f 1`
