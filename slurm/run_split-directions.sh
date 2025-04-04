@@ -11,9 +11,6 @@ IMCAT=${DATA_DIR}/${OBSID}/../image_catalogue_${SLURM_ARRAY_TASK_ID}.csv
 ## make a name for the output directory
 CATOUTDIR=${OBSID}_${SLURM_ARRAY_TASK_ID}
 
-# delay cal solutions
-export DELAYSOLS=`ls ${DATA_DIR}/${OBSID}/phaseup-concat/*verified.h5`
-
 #################################################################################
 ## Cluster specific directories to change
 ## PLEASE SEE slurm/add_these_to_bashrc.txt 
@@ -37,11 +34,15 @@ export TOIL_CHECK_ENV=True
 if test -d ${DATA_DIR}/${OBSID}/process-ddf
 then
         DATADIR=${DATA_DIR}/${OBSID}/process-ddf
-elif test -d ${DATA_DIR}/${OBSID}/delay-calibration
+elif test -d ${DATA_DIR}/${OBSID}/concatenate-flag
 then
-	DATADIR=${DATA_DIR}/${OBSID}/delay-calibration
+	export DATADIR=${DATA_DIR}/${OBSID}/concatenate-flag
+	export DELAYSOLS=`ls ${DATA_DIR}/${OBSID}/phaseup-concat/*verified.h5`
+	export MSSUFFIX=.ms
 else
-        DATADIR=${DATA_DIR}/${OBSID}/HBA_target_VLBI/results
+        export DATADIR=${DATA_DIR}/${OBSID}/HBA_target_VLBI/results
+	export DELAYSOLS=`ls ${DATA_DIR}/${OBSID}/delay-calibration/*verified.h5`
+	export MSSUFFIX=.dp3concat
 fi
 PROCDIR=${DATA_DIR}/processing
 OUTDIR=${PROCDIR}/${CATOUTDIR}
@@ -72,7 +73,7 @@ export APPTAINERENV_PYTHONPATH=${VLBIDIR}/scripts:${LINCDIR}/scripts:\$PYTHONPAT
 cd ${OUTDIR}
 
 ## list of measurement sets 
-apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py VLBI split-directions --max_dp3_threads 1 --h5merger=${LOFARHELPERS} --selfcal=${FACETSELFCAL} --do_selfcal=false --delay_solset ${DELAYSOLS} --image_cat ${IMCAT} --ms_suffix .dp3concat ${DATADIR} >> create_ms_list.log 2>&1
+apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py VLBI split-directions --max_dp3_threads 1 --h5merger=${LOFARHELPERS} --selfcal=${FACETSELFCAL} --do_selfcal=false --delay_solset ${DELAYSOLS} --image_cat ${IMCAT} --ms_suffix ${MSSUFFIX} ${DATADIR} >> create_ms_list.log 2>&1
 
 echo LINC starting
 TMPID=`echo ${OBSID} | cut -d'/' -f 1`

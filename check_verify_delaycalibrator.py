@@ -7,6 +7,16 @@ from tasklist import mark_done
 import os
 import glob
 
+def get_solpath( field ):
+    basedir = os.getenv('DATA_DIR')
+    obsid = get_local_obsid( field )[0]
+    solpath = os.path.join( basedir, field, obsid )
+    if os.path.exists( os.path.join( solpath, 'phaseup-concat' ) ):
+        solpath = os.path.join( solpath, 'phaseup-concat' )
+    elif os.path.exists( os.path.join( solpath, 'delay-calibration' ) ):
+        solpath = os.path.join( solpath, 'delay-calibration' )
+    return( solpath )
+
 def main( obsid='', solutions='' ):
     user = os.getenv('USER')
     if len(user) > 20:
@@ -28,8 +38,8 @@ def main( obsid='', solutions='' ):
             print('Please check the following delay calibrator solutions and then run this script again when you are ready to verify the solutions:')
             for r in result:
                 loc = r['location']
-                obsid = get_local_obsid( r['id'] )[0]
-                print('Field: {:s} .... with solutions at {:s}/{:s}/phaseup-concat/'.format(r['id'],os.path.join( basedir,r['id'] ),obsid))
+                solpath = get_solpath( r['id'] )
+                print('Field: {:s} .... with solutions at {:s}'.format(r['id'],solpath))
     else:
         if obsid == '' or solutions == '':
             print('You have provided either the observation id OR the solutions file, please provide both!')
@@ -47,8 +57,8 @@ def main( obsid='', solutions='' ):
                     for local_obsid in local_obsids:
                         if obsid == local_obsid:
                             #Found the field matching obsid
-                            phaseupconcatpath = os.path.join( basedir, field, obsid, 'phaseup-concat' )
-                            solutionspath = os.path.dirname(solutions)
+                            phaseupconcatpath = get_solpath( field )
+                            solutionspath = os.path.dirname( solutions )
                             if phaseupconcatpath == solutionspath:
                                 ## the first solutions are suitable! nothing to be done
                                 print('Accepting the pipeline version of the solutions, cleaning up.')

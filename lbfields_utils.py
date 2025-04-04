@@ -548,6 +548,9 @@ def cleanup_step(field):
     field_datadir = os.path.join(basedir,field,fieldobsid)
     workflowdir = os.path.join(field_datadir,workflow)
     os.makedirs(workflowdir,exist_ok=True)
+    ## clean the scratch directory if it's different than procdir
+    if os.getenv('SCRATCH_DIR') != procdir:
+        os.system('rm -rf {:s}/*'.format(os.path.join(os.getenv('SCRATCH_DIR'),fieldobsid)) )
     for field_procdir in field_procdirs:
         ## remove logs directory (run was successful)
         os.system('rm -rf {:s}'.format(os.path.join(field_procdir,'logs')))
@@ -561,7 +564,7 @@ def cleanup_step(field):
             dest = os.path.join(workflowdir,os.path.basename(ff).replace('out_',''))
             os.system('mv {:s} {:s}'.format(ff,dest))
         ## remove data from previous step if required
-        if workflow in ['setup','delay-calibration']:
+        if workflow in ['setup','delay-calibration','target_VLBI']:
             os.system('rm -r {:s}'.format(os.path.join(field_datadir, '*.MS')))
         if workflow in ['HBA_target']:
             os.system('cp {:s} {:s}'.format(os.path.join(workflowdir,'LINC-cal_solutions.h5'),os.path.join(field_datadir,'LINC-target_solutions.h5')))
