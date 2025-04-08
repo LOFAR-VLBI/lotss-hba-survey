@@ -38,13 +38,16 @@ TARGETMS=`ls -d ILTJ*`
 apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FACETSELFCAL}/facetselfcal.py ${TARGETMS} --helperscriptspath ${FACETSELFCAL} --helperscriptspathh5merge ${LOFARHELPERS} --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=56 > facet_selfcal.log 2>&1
 
 ## check if it finishes 
-if compgen -G "merged_selfcalcycle009*h5" > /dev/null; then
+if compgen -G "merged_selfcalcycle*h5" > /dev/null; then
+    ## find the last cycle to run to copy over
+    TMP=`find -iname "merged_selfcalcycle*h5" | sort -n | tail -1`
+    CYCLE=`echo ${TMP} | cut -d'_' -f 2`
 	## clean up and write a finished.txt
 	mkdir tmp
 	mv * tmp/
 	mv tmp/${TARGETMS} .
 	#mv tmp/${TARGETMS}.copy .
-	mv tmp/merged*selfcalcycle009*.h5 .
+	mv tmp/merged*${CYCLE}*.h5 .
 	mv tmp/plotlosoto* .
 	mv tmp/*png .
 	mv tmp/*MFS-image.fits .
