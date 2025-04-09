@@ -60,8 +60,12 @@ if compgen -G "merged_selfcalcycle*h5" > /dev/null; then
 	mv * ${ILTJ}/
 	echo 'SUCCESS: Pipeline finished successfully' > ${OUTDIR}/finished.txt
 	echo 'Resolved /fake/workflow/selfcal.cwl' > ${OUTDIR}/job_output.txt
+elif cat facet_selfcal.log | grep -q "FAILED"; then
+    ## it's crashed
+    echo "**FAILURE**: Pipeline failed" > ${OUTDIR}/finished.txt
+	echo 'Resolved /fake/workflow/selfcal.cwl' > ${OUTDIR}/job_output.txt    
 else
-        echo "**FAILURE**: Pipeline failed" > ${OUTDIR}/finished.txt
+    echo "**FAILURE**: Pipeline failed" > ${OUTDIR}/finished.txt
 	echo 'Resolved /fake/workflow/selfcal.cwl' > ${OUTDIR}/job_output.txt
 fi
 
