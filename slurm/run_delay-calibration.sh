@@ -16,7 +16,7 @@ export LINCDIR=${SOFTWAREDIR}/LINC
 export FLOCSDIR=${SOFTWAREDIR}/flocs
 export LOFARHELPERS=${SOFTWAREDIR}/lofar_helpers
 export FACETSELFCAL=${SOFTWAREDIR}/lofar_facet_selfcal
-BINDPATHS=${SOFTWAREDIR},${DATA_DIR},${WORK_DIR}
+BINDPATHS=${SOFTWAREDIR},${DATA_DIR},${SCRATCH_DIR}
 
 ## for TOIL
 export TOIL_SLURM_ARGS="${CLUSTER_OPTS} --export=ALL -t 24:00:00 -N 1 --ntasks=1"
@@ -43,15 +43,15 @@ mkdir -p ${LOGSDIR}
 ## location of LINC
 LINC_DATA_ROOT=${LINCDIR}
 
-# Pass along necessary variables to the container.
 export APPTAINER_CACHEDIR=${SOFTWAREDIR}/singularity
 export APPTAINER_TMPDIR=${APPTAINER_CACHEDIR}/tmp
 export APPTAINER_PULLDIR=${APPTAINER_CACHEDIR}/pull
 export APPTAINER_BIND=${BINDPATHS}
 export APPTAINERENV_LINC_DATA_ROOT=${LINC_DATA_ROOT}
-#### PATH: note that apptainer has a bug and does not use APPTAINERENV_PREPEND_PATH correctly
-export SINGULARITYENV_PREPEND_PATH=${VLBIDIR}/scripts:${LINCDIR}/scripts
-export APPTAINERENV_PYTHONPATH=${VLBIDIR}/scripts:${LINCDIR}/scripts:\$PYTHONPATH
+export APPTAINERENV_LOGSDIR=${LOGSDIR}
+export APPTAINERENV_TMPDIR=${TMPDIR}
+export SINGULARITYENV_PREPEND_PATH=${VLBIDIR}/scripts:${LINC_DATA_ROOT}/scripts
+export APPTAINERENV_PYTHONPATH=${VLBIDIR}/scripts:${LINC_DATA_ROOT}/scripts:\$PYTHONPATH
 
 ## go to working directory
 cd ${OUTDIR}
@@ -72,7 +72,7 @@ fi
 echo LINC starting
 TMPID=`echo ${OBSID} | cut -d'/' -f 1`
 
-toil-cwl-runner --no-read-only --singularity --bypass-file-store --jobStore=${JOBSTORE} --logFile=${OUTDIR}/job_output.txt --workDir=${WORKDIR} --outdir=${OUTPUT} --retryCount 0 --writeLogsFromAllJobs TRUE --writeLogs=${LOGSDIR} --tmp-outdir-prefix=${TMPD}/ --coordinationDir=${OUTPUT} --tmpdir-prefix=${TMPD}_interim/ --disableAutoDeployment True --preserve-environment ${APPTAINERENV_PYTHONPATH} ${SINGULARITYENV_PREPEND_PATH} ${APPTAINERENV_LINC_DATA_ROOT} ${APPTAINER_BIND} ${APPTAINER_PULLDIR} ${APPTAINER_TMPDIR} ${APPTAINER_CACHEDIR} --batchSystem slurm ${VLBIDIR}/workflows/delay-calibration.cwl mslist_VLBI_delay_calibration.json
+toil-cwl-runner --no-read-only --singularity --bypass-file-store --jobStore=${JOBSTORE} --logFile=${OUTDIR}/job_output.txt --workDir=${WORKDIR} --outdir=${OUTPUT} --retryCount 0 --writeLogsFromAllJobs TRUE --writeLogs=${LOGSDIR} --tmp-outdir-prefix=${TMPD}/ --coordinationDir=${OUTPUT} --tmpdir-prefix=${TMPD}_interim/ --disableAutoDeployment True --preserve-environment ${APPTAINERENV_PYTHONPATH} ${SINGULARITYENV_PREPEND_PATH} ${APPTAINERENV_LINC_DATA_ROOT} ${APPTAINER_BIND} ${APPTAINER_PULLDIR} ${APPTAINER_TMPDIR} ${APPTAINER_LOGSDIR} ${APPTAINER_CACHEDIR} --batchSystem slurm ${VLBIDIR}/workflows/delay-calibration.cwl mslist_VLBI_delay_calibration.json
 
 if grep 'CWL run complete' ${OUTDIR}/job_output.txt
 then 
