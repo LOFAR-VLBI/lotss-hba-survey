@@ -2,7 +2,7 @@
 #SBATCH -N 1                  # number of nodes
 #SBATCH -c 1                 # number of cores  ### CLUSTER SPECIFIC
 #SBATCH --ntasks=1            # number of tasks
-#SBATCH -t 28:00:00           # maximum run time in [HH:MM:SS] or [MM:SS] or [minutes]
+#SBATCH -t 48:00:00           # maximum run time in [HH:MM:SS] or [MM:SS] or [minutes]
 
 ## submit the job with OBSID as an argument
 OBSID=${1}
