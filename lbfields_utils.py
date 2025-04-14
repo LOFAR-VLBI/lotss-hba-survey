@@ -40,6 +40,33 @@ def update_status(name,status,stage_id=None,time=None,workdir=None,av=None,surve
         sdb.db_set('lb_fields',idd)
 
 ##############################
+## job management
+
+def restart_toil_job( field, obsid, workflow ):
+    softwaredir = os.getenv('SOFTWAREDIR')
+    slurmscript = os.path.join( softwaredir, 'lotss-hba-survey/slurm', 'run_{:s}.sh'.format( workflow.replace('HBA_','' ) ) )
+    ## read the file
+    with open( slurmscript, 'r' ) as f:
+        lines = f.readlines()
+    for i in np.arange(0,len(lines)):
+        if 'toil-cwl-runner' in lines[i]:
+            lines[i] = lines[i].replace('--singularity','--singularity --restart') 
+        if 'create_ms_list.py' in lines[i]:
+            lines[i] = '## '+lines[i]
+    with open( 'restart_slurm.sh','w' ) as f:
+        for line in lines:
+            f.write(line)    
+    cluster_opts = os.getenv('CLUSTER_OPTS')
+    if workflow == 'split-directions':
+        command = chunk_imagecat( fieldobsid )
+    else:
+        command = "sbatch -J {:s} {:s} restart_slurm.sh {:s}/{:s}".format(field, cluster_opts, field, obsid)
+    update_status(field,'Queued')
+    if os.system(command):
+        update_status(field,"Submission failed")
+
+
+##############################
 ## do things by obsid
 
 def get_obsids( name, survey=None ):
@@ -300,7 +327,7 @@ def do_download( name ):
             ## rclone / macaroon - NOTE: project-specific macaroon generated; requires grid certificate
             files = [ val.split('8443')[-1] for val in surls ]
             mac_name = get_juelich_macaroon( name )
-            rc = RClone( '%s/%s'%(basedir,mac_name), debug=True)
+            rc = RClone( mac_name, debug=True)
             rc.get_remote()
             for f in files:
                 d = rc.execute(['-P','--no-check-certificate=true','copy',rc.remote + f]+[caldir]) 
@@ -353,8 +380,9 @@ def get_juelich_macaroon( field ):
     proj_name = tmp[-1].split('/')[0]
     ## generate voms-proxy-init
     os.system( 'cat ~/macaroons/secret-file | voms-proxy-init --pwstdin --voms lofar:/lofar/user/sksp --valid 1680:0' )
-    os.system( 'get-macaroon --url https://dcache-lofar.fz-juelich.de:2882/pnfs/fz-juelich.de/data/lofar/ops/projects/{:s} --duration P7D --proxy --permissions READ_METADATA,DOWNLOAD --ip 0.0.0.0/0 --output rclone {:s}_juelich'.format( proj_name, proj_name ) )
-    mac_name = '{:s}_juelich.conf'.format(proj_name) 
+    mac_name = os.path.join( os.getenv('MACAROON_DIR'), '{:s}_juelich'.format(proj_name) )
+    os.system( 'get-macaroon --url https://dcache-lofar.fz-juelich.de:2882/pnfs/fz-juelich.de/data/lofar/ops/projects/{:s} --duration P7D --proxy --permissions READ_METADATA,DOWNLOAD --ip 0.0.0.0/0 --output rclone {:s}'.format( proj_name, mac_name ) )
+    mac_name = mac_name + '.conf'
     return( mac_name )
 
 ##############################
