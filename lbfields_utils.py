@@ -245,29 +245,37 @@ def stage_field( name, survey=None ):
         # If really only 1 observation, construct its srmfile and proceed
         if obs_ok==1:
             srmfilename = 'https://public.spider.surfsara.nl/project/lotss/shimwell/LINC/srmfiles/srm%d.txt'%(obs[nobs_ok]['id'])
-        # multiple obs in 1 field complicated because ddflight, phaseup_concat need
-        # data from all obs to be done at once; these to be left "for later"
+            srmfilenames = [srmfilename]
         else:
-            print ('Multiple observations in one field not currently supported')
-            print ('Updating status to Multiple')
-            update_status (name, 'Multiple')
-            return(None)
-    response = requests.get(srmfilename) 
-    data = response.text
-    uris = data.rstrip('\n').split('\n')
-    ## get obsid and create a directory
-    obsid = uris[0].split('/')[-2]
+            ## get the srm files and return an array
+            srmfilenames = []
+            for o in obs:
+                srmfilenames.append( 'https://public.spider.surfsara.nl/project/lotss/shimwell/LINC/srmfiles/srm%d.txt'%(o['id']) )
+    uris_to_stage = []
+    for srmfile in srmfilenames:
+        response = requests.get(srmfile) 
+        data = response.text
+        uris = data.rstrip('\n').split('\n')
+        uris_to_stage = uris_to_stage + uris
+    ## get obsid(s) and create a directory/directories
+    obsids = []
+    for uri in uris_to_stage:
+        obsids.append(uri.split('/')[-2])
+    obsids = np.unique(obsids)
     tmp = os.path.join(str(os.getenv('DATA_DIR')),str(name))
-    caldir = os.path.join(tmp,obsid)
-    ## if directory already exists, it is possible that some things have already been staged
-    if os.path.exists(caldir):
-        tarfiles = glob.glob(os.path.join(caldir,'*.tar'))
-        trfs = [ val.split('/')[-1] for val in tarfiles ]
-        new_uris = [ uri for uri in uris if uri.split('/')[-1] not in trfs ]
-        uris = new_uris
-    else:
-        os.makedirs(caldir) 
-    stage_id = stager_access.stage(uris)
+    for obsid in obsids:    
+        caldir = os.path.join(tmp,obsid)
+        ## if directory already exists, it is possible that some things have already been staged
+        if os.path.exists(caldir):
+            tarfiles = glob.glob(os.path.join(caldir,'*.tar'))
+            trfs = [ val.split('/')[-1] for val in tarfiles ]
+            ## remove the already downloaded files from uris_to_stage ... 
+            idxs = [ i for i,val in enumerate(uris_to_stage) if val.split('/')[-1] in trfs ]
+            for idx in idxs:
+                uris_to_stage.pop(idx)
+        else:
+            os.makedirs(caldir) 
+    stage_id = stager_access.stage(uris_to_stage)
     update_status(name, 'Staging', stage_id=stage_id )
     return(caldir)
 
