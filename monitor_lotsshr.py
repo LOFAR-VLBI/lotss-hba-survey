@@ -185,18 +185,16 @@ while True:
     if do_stage and nextfield is not None:
         stage_name=nextfield
         print('We need to stage a new field (%s)' % stage_name)
-        solutions_name = stage_field(stage_name)
-        if solutions_name is None:  # multiple field ignored for now
-            continue
+        solutions_names = stage_field(stage_name)
         ## while staging, collect the solutions
-        solutions_thread=threading.Thread(target=collect_solutions_lhr, args=(solutions_name,))
-        solutions_thread.start()
+        for solutions_name in solutions_names:
+            collect_solutions_lhr(solutions_name)
         ## and download the catalogue
         with SurveysDB(survey=None) as sdb:
             idd=sdb.db_get('lb_fields',stage_name)
         generate_catalogues( float(idd['ra']), float(idd['decl']), targRA = float(idd['ra']), targDEC = float(idd['decl']),
              im_radius=1.24, bright_limit_Jy=5., lotss_result_file='image_catalogue.csv', delay_cals_file='delay_calibrators.csv', 
-             match_tolerance=5., image_limit_Jy=0.01, vlass=True, html=False, outdir=os.path.dirname(solutions_name) )
+             match_tolerance=5., image_limit_Jy=0.01, vlass=True, html=False, outdir=os.path.dirname(solutions_names[0]) )
 
     ## for things that are staging, calculate 
     if 'Staging' in d.keys():

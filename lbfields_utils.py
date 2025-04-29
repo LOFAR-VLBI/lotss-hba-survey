@@ -263,6 +263,7 @@ def stage_field( name, survey=None ):
         obsids.append(uri.split('/')[-2])
     obsids = np.unique(obsids)
     tmp = os.path.join(str(os.getenv('DATA_DIR')),str(name))
+    caldirs = []
     for obsid in obsids:    
         caldir = os.path.join(tmp,obsid)
         ## if directory already exists, it is possible that some things have already been staged
@@ -275,9 +276,10 @@ def stage_field( name, survey=None ):
                 uris_to_stage.pop(idx)
         else:
             os.makedirs(caldir) 
+        caldirs.append(caldir)
     stage_id = stager_access.stage(uris_to_stage)
     update_status(name, 'Staging', stage_id=stage_id )
-    return(caldir)
+    return(caldirs)
 
 ##############################
 ## downloading
