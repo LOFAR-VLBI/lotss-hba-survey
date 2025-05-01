@@ -368,7 +368,7 @@ def do_download( name ):
             ## check that everything was downloaded
             tarfiles = check_tarfiles( caldir )
             all_tarfiles = all_tarfiles + tarfiles
-        if len(tarfiles) == len(surls):
+        if len(all_tarfiles) == len(surls):
             print('Download successful for {:s}'.format(name) )
             update_status(name,'Downloaded',stage_id=0)
 
