@@ -76,6 +76,9 @@ toil-cwl-runner --no-read-only --singularity --bypass-file-store --moveExports -
 if grep 'CWL run complete' ${OUTDIR}/job_output.txt
 then 
 	echo 'SUCCESS: Pipeline finished successfully' > ${OUTDIR}/finished.txt
+elif grep 'Finished toil run successfully' ${OUTDIR}/job_output.txt 
+then
+	echo 'SUCCESS: Pipeline finished successfully' > ${OUTDIR}/finished.txt
 else
 	echo "**FAILURE**: Pipeline failed with exit status: ${?}" > ${OUTDIR}/finished.txt
 fi
