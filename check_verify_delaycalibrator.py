@@ -83,6 +83,7 @@ def main( obsid='', solutions='' ):
                                     os.system('mv {:s} {:s}'.format(oldf, os.path.join(defaultdir,os.path.basename(oldf)) ) )
                                 ## move the new solution directory back
                                 os.system( 'mv {:s}/* {:s}'.format(tmpdir,solutionspath) )
+                                os.system( 'rmdir {:s}'.format(tmpdir))
                                 ## now copy the new solutions
                                 os.system('cp {:s} {:s}'.format(solutions, os.path.join(phaseupconcatpath, os.path.basename(solutions).replace('.h5','_verified.h5') ) ) )
                                 ## also want to move plots etc, assume in os.path.dirname(solutions)
