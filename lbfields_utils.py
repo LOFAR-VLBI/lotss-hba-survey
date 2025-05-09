@@ -301,7 +301,7 @@ def do_download( name ):
         project = surls[0].split('/')[-3]
         ## get unique obsids
         tmp_obsids = [ val.split('/')[-2] for val in surls ]
-        obsids = np.unique(tmp)
+        obsids = np.unique(tmp_obsids)
         all_tarfiles = []
         for obsid in obsids:
             obsid_path = os.path.join(project,obsid)
@@ -437,48 +437,48 @@ def dysco_compress_job(caldir):
 
 def do_unpack(field):
     update_status(field,'Unpacking')
-    success=True
     do_dysco=False # Default should be false
     caldir = os.path.join(str(os.getenv('DATA_DIR')),field)
     obsdirs = glob.glob(os.path.join(caldir,'*'))
-    obsdir = [ val for val in obsdirs if os.path.isdir(val) ]
-    if len(obsdir) > 1:
-        ## there are multiple observations for this field, this isn't handled yet
-        pass
-    else:
-        obsdir = obsdir[0]
-    ## get the tarfiles
-    tarfiles = glob.glob(os.path.join(obsdir,'*tar'))
-    ## check if needs dysco compression
-    gb_filesize = os.path.getsize(tarfiles[0])/(1024*1024*1024)
-    ## update the above to be non-hacky
-    if gb_filesize > 40.:
-        do_dysco = True
-    if os.getenv("UNPACK_AS_JOB"):
-        # Logic for Unpacking Jobs - uses untar.sh and dysco.sh
-        for trf in tarfiles:
-            os.system('sbatch {:s} -W {:s}/lotss-hba-survey/slurm/untar.sh {:s} {:s}'.format(os.getenv('CLUSTER_OPTS'),os.getenv("SOFTWAREDIR"), trf, field))
-            #msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
-            #os.system( 'mv {:s} {:s}'.format(msname,obsdir))
-        if do_dysco:
-            dysco_success = dysco_compress_job(obsdir)
-    else:
-        for trf in tarfiles:
-            os.system( 'tar -xvf {:s} >> {:s}_unpack.log 2>&1'.format(trf,field) )
-            msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
-            os.system( 'mv {:s} {:s}'.format(msname,obsdir))
+    tmp = [ val for val in obsdirs if os.path.isdir(val) ]
+    obsdirs = tmp
+    for obsdir in obsdirs:
+        ## get the tarfiles
+        tarfiles = glob.glob(os.path.join(obsdir,'*tar'))
+        ## check if needs dysco compression
+        gb_filesize = os.path.getsize(tarfiles[0])/(1024*1024*1024)
+        ## update the above to be non-hacky
+        if gb_filesize > 40.:
+            do_dysco = True
+        if os.getenv("UNPACK_AS_JOB"):
+            # Logic for Unpacking Jobs - uses untar.sh and dysco.sh
+            for trf in tarfiles:
+                os.system('sbatch {:s} -W {:s}/lotss-hba-survey/slurm/untar.sh {:s} {:s}'.format(os.getenv('CLUSTER_OPTS'),os.getenv("SOFTWAREDIR"), trf, field))
+                #msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
+                #os.system( 'mv {:s} {:s}'.format(msname,obsdir))
             if do_dysco:
-                dysco_success = dysco_compress(obsdir,msname)
-                ## ONLY FOR NOW
-                if dysco_success:
-                    os.system('rm {:s}'.format(trf))
-                
+                dysco_success = dysco_compress_job(obsdir)
+        else:
+            for trf in tarfiles:
+                os.system( 'tar -xvf {:s} >> {:s}_unpack.log 2>&1'.format(trf,field) )
+                msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
+                os.system( 'mv {:s} {:s}'.format(msname,obsdir))
+                if do_dysco:
+                    dysco_success = dysco_compress(obsdir,msname)
+                    ## ONLY FOR NOW
+                    if dysco_success:
+                        os.system('rm {:s}'.format(trf))
     ## check that everything unpacked
-    msfiles = glob.glob('{:s}/L*MS'.format(obsdir))
-    if len(msfiles) == len(tarfiles):
-        update_status(field,'Unpacked')
-        os.system('rm {:s}/*.tar'.format(obsdir))
+    success = 0    
+    for obsdir in obsdirs:
+        msfiles = glob.glob('{:s}/L*MS'.format(obsdir))
+        tarfiles = glob.glob( '{:s}/L*tar'.format(obsdir))
+        if len(msfiles) == len(tarfiles):
+            success = success + 1    
+            os.system('rm {:s}/*.tar'.format(obsdir))
+    if success == len(obsdirs):
         os.system('rm {:s}_unpack.log'.format(field))
+        update_status(field,'Unpacked')
     else:
         update_status(field,'Unpack failed')    
 
