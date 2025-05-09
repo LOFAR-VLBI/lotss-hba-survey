@@ -62,24 +62,38 @@ def main( obsid='', solutions='' ):
                             if phaseupconcatpath == solutionspath:
                                 ## the first solutions are suitable! nothing to be done
                                 print('Accepting the pipeline version of the solutions, cleaning up.')
+                                ## move plots to verified directory
+                                verifieddir = os.path.join(phaseupconcatpath,'verified_solution_plots')
+                                os.makedirs(verifieddir, exist_ok=True)
+                                oldfiles = glob.glob(os.path.join(phaseupconcatpath,'*png'))
+                                for oldf in oldfiles:
+                                    os.system('mv {:s} {:s}'.format(oldf, verifieddir ) )
+                                ## copy the solutions to be verified
                                 os.system('cp {:s} {:s}'.format(solutions, os.path.join(phaseupconcatpath,os.path.basename(solutions).replace('.h5','_verified.h5') ) ) )
                             else:
+                                ## temporarily move the new solution directory - in case user has re-run inside the pipeline directory
+                                tmpdir = os.path.join(os.getenv('DATA_DIR'),'tmp_delaysols')
+                                os.system( 'mkdir {:s}'.format(tmpdir) )
+                                os.system( 'mv {:s} {:s}/'.format(solutionspath,tmpdir) )
+                                ## move the old files
                                 oldfiles = glob.glob(os.path.join(phaseupconcatpath,'*'))
                                 defaultdir = os.path.join(phaseupconcatpath,'pipelinesols') 
                                 os.makedirs(defaultdir, exist_ok=True)
                                 for oldf in oldfiles:
                                     os.system('mv {:s} {:s}'.format(oldf, os.path.join(defaultdir,os.path.basename(oldf)) ) )
-                                ## copy solutions
+                                ## move the new solution directory back
+                                os.system( 'mv {:s}/* {:s}'.format(tmpdir,solutionspath) )
+                                os.system( 'rmdir {:s}'.format(tmpdir))
+                                ## now copy the new solutions
                                 os.system('cp {:s} {:s}'.format(solutions, os.path.join(phaseupconcatpath, os.path.basename(solutions).replace('.h5','_verified.h5') ) ) )
-
-                            ## also want to move plots etc, assume in os.path.dirname(solutions)
-                            newfiles = glob.glob(os.path.join(solutionspath,'plotlosoto*/*'))
-                            if len(newfiles) == 0:
-                                newfiles = glob.glob(os.path.join(solutionspath,'*009*png'))
-                            verifieddir = os.path.join(phaseupconcatpath,'verified_solution_plots')
-                            os.makedirs(verifieddir, exist_ok=True)
-                            for newf in newfiles:
-                                 os.system('mv {:s} {:s}'.format(newf, os.path.join(verifieddir, os.path.basename(newf)) ) )
+                                ## also want to move plots etc, assume in os.path.dirname(solutions)
+                                newfiles = glob.glob(os.path.join(solutionspath,'plotlosoto*/*'))
+                                if len(newfiles) == 0:
+                                    newfiles = glob.glob(os.path.join(solutionspath,'*009*png'))
+                                verifieddir = os.path.join(phaseupconcatpath,'verified_solution_plots')
+                                os.makedirs(verifieddir, exist_ok=True)
+                                for newf in newfiles:
+                                     os.system('mv {:s} {:s}'.format(newf, os.path.join(verifieddir, os.path.basename(newf)) ) )
                             # update statuses
                             print('Delay solutions verified and have been copied to: {:s}'.format( os.path.join(phaseupconcatpath, os.path.basename(solutions).replace('.h5','_verified.h5') ) ) )
                             print(f'Updating status for {field}')
