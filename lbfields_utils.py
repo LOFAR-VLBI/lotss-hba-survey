@@ -553,7 +553,16 @@ def get_workflow_obsid(outdir):
 
 def check_field(field):
     field_obsids = get_local_obsid(field)
-    fieldobsid = '{:s}/{:s}'.format(field,field_obsids[0])
+    for tmp_obsid in field_obsids:
+        tmp_fieldobsid = '{:s}/{:s}'.format(field,tmp_obsid)
+        ## check for presence of processing directories
+        tmp_outdir = glob.glob(os.path.join(os.getenv('DATA_DIR'),'processing',tmp_fieldobsid))
+        if len(tmp_outdir) > 0:
+            ## check if directory is not empty
+            contents = os.listdir(tmp_outdir[0])
+            if len(contents) > 0:
+                obsid = tmp_obsid
+    fieldobsid = '{:s}/{:s}'.format(field,obsid)
     procdir = os.path.join(str(os.getenv('DATA_DIR')),'processing')
     outdirs = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid)))
     finished = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid),'finished.txt') )
