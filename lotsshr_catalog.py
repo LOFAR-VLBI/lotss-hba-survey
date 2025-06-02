@@ -1,11 +1,51 @@
 import bdsf
-from astropy.table import Table, vstack
+from astropy.table import Table, vstack, join
 from astropy.io import fits
 import numpy as np
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import os, glob, re
 import argparse
+
+################################################
+## borrowed from facetselfcal and adjusted to pass back rms
+
+def findrms(mIn, maskSup=1e-7):
+    """
+    find the rms of an array, from Cycil Tasse/kMS
+    """
+    m = mIn[np.abs(mIn) > maskSup]
+    rmsold = np.std(m)
+    diff = 1e-1
+    cut = 3.
+    med = np.median(m)
+    for i in range(10):
+        ind = np.where(np.abs(m - med) < rmsold * cut)[0]
+        rms = np.std(m[ind])
+        if np.abs((rms - rmsold) / rmsold) < diff: break
+        rmsold = rms
+    return rms
+
+def get_image_dynamicrange(image):
+    """
+    Get dynamic range of an image (peak over rms)
+
+    Args:
+        image (str): FITS image file name .
+     
+    Returns:
+        DR (float): Dynamic range vale.
+    """
+
+    print('Compute image dynamic range (peak over rms): ', image)
+    hdul = fits.open(image)
+    image_rms = findrms(np.ndarray.flatten(hdul[0].data))
+    DR = np.nanmax(np.ndarray.flatten(hdul[0].data)) / image_rms
+    hdul.close()
+    return DR, image_rms
+
+################################################
+
 
 def natural_sort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
@@ -23,7 +63,44 @@ def fix_imhead( fitsfile ):
         print( 'RA is already positive, exiting.' )
 
 def collapse_source( components ):
-    
+    ## sum total fluxes
+    total_flux = np.sum( components['Total_flux'] )
+    e_total_flux = np.sqrt( np.sum( np.power( components['E_Total_flux'], 2. ) ) )
+    ## directly use peak flux
+    peak_flux = np.max( components['Peak_flux'] )
+    e_peak_flux = components['E_Peak_flux'][np.where( components['Peak_flux'] == peak_flux )[0]]
+    ## flux-weighted average of RA and DEC
+    ra_avg = np.average( components['RA'], weights=components['Total_flux'] )
+    dec_avg = np.average( components['DEC'], weights=components['Total_flux'] )
+    ## errors on the RA and DEC
+    e_ra_avg = np.sqrt( np.sum( np.power( components['E_RA'], 2. ) ) )
+    e_dec_avg = np.sqrt( np.sum( np.power( components['E_DEC'], 2. ) ) )
+    ## rms
+    isl_rms = np.mean( components['Isl_rms'] )
+    if len(components) > 1:
+        ncomp = len(components)
+        scode = 'M'
+    else:
+        ncomp = 1
+        scode = components['S_Code'][0]
+
+    ## size and PA ?
+    #PA_avg = np.arctan2( np.sum( np.sin( components['PA']*np.pi/180.), np.sum( np.cos( components['PA']*np.pi/180. ) ) ) * 180. / np.pi
+
+    tmp = Table()
+    tmp.add_column( [ra_avg], name='RA' )
+    tmp.add_column( [e_ra_avg], name='E_RA' )
+    tmp.add_column( [dec_avg], name='DEC' )
+    tmp.add_column( [e_dec_avg], name='E_DEC' )
+    tmp.add_column( [total_flux], name='Total_flux' )
+    tmp.add_column( [e_total_flux], name='E_Total_flux' )
+    tmp.add_column( [peak_flux], name='Peak_flux' )
+    tmp.add_column( [e_peak_flux], name='E_Peak_flux' )
+    tmp.add_column( [isl_rms], name='Isl_rms' )
+    tmp.add_column( [ncomp], name='Ncomponents' )
+    tmp.add_column( [scode], name='S_Code' )
+    return( tmp )
+
 def get_component( src ):
     tmp = Table()
     tmp.add_column( [src.source_id], name='component' )
@@ -54,7 +131,7 @@ def get_component( src ):
 def get_source_info( source_file, sc_round='000' ):
     ## source name
     source_name = os.path.basename(source_file)
-    ## source detection 
+    ## source detection images
     imf = os.path.join( source_file, 'image_{:s}-MFS-image-pb.fits'.format(sc_round) ) ## true flux
     appf = os.path.join( source_file, 'image_{:s}-MFS-image.fits'.format(sc_round) ) ## apparent flux
     ## fix image header 
@@ -73,7 +150,9 @@ def get_source_info( source_file, sc_round='000' ):
     source_table.add_column(source_name, index=0, name='Source_id' )
     return( source_table ) 
 
-def main( pointing, outdir='catalogue', catfile='pointing_catalogue.fits', update=False ):
+def main( pointing, outdir='catalogue', catfile='catalogue.fits', update=False ):
+
+    catfile = '{:s}_{:s}'.format(pointing,catfile)
 
     ## bdsf settings
     thresh_pix = 5
@@ -112,6 +191,7 @@ def main( pointing, outdir='catalogue', catfile='pointing_catalogue.fits', updat
     else:
         print('catalogue does not exist, creating.')
         pointing_cat = Table()
+        combined_cat = Table()
 
     for source_file in sources:
         ## get lotss info on source
@@ -133,26 +213,74 @@ def main( pointing, outdir='catalogue', catfile='pointing_catalogue.fits', updat
             source_info = get_source_info( source_file, sc_round='000' )  
         '''
 
-        ## until then get both first and last selfcal
-        source_info_000 = get_source_info( source_file, sc_round='000' )
-        for cn in source_info_000.colnames:
-            source_info_000.rename_column( cn, '{:s}_0'.format(cn) )
-        last_sc = os.path.basename( natural_sort( glob.glob(os.path.join( source_file, 'image_*-MFS-image.fits')) )[-1] ).split('-')[0].replace('image_','') 
-        source_info = get_source_info( source_file, sc_round=last_sc )
+        drs = []
+        rmss = []
+        if os.path.exists( os.path.join( source_file, 'image_000-MFS-image-pb.fits' ) ):
+            imfiles = natural_sort( glob.glob( os.path.join( source_file, 'image_*-MFS-image-pb.fits' ) ) )
+        else:
+            imfiles = natural_sort( glob.glob( os.path.join( source_file, 'image_*-MFS-image.fits' ) ) )
+        for imfile in imfiles:
+            dr, rms = get_image_dynamicrange( imfile )
+            drs.append(dr)
+            rmss.append(rms)
 
-        if os.path.exists('Default-'+source+'.srl.fits'):
-            #If no sources are found, no output file is written
-            srl = Table.read('Default-'+source+'.srl.fits', format='fits')
-            srl_coords = SkyCoord(srl['RA'], srl['DEC'], unit='deg' )
-            seps = srl_coords.separation(src_coords)
-            tmp_srl = srl[np.where(seps <= majax)]
-            ## add radius from phase centre
-            if len(tmp_srl) > 0:
-                #Catch situation where no sources lie within the selection
-                tmp_srl['Radius'] = radius
-                pointing_cat = vstack([pointing_cat,tmp_srl])
+        ## decide which iteration to use with normalised combination
+        check_iter = drs / np.max(drs) + rmss / np.max(rmss)
+        iter_idx = np.where( check_iter == np.max(check_iter) )[0][0]
+        iteration = f'{iter_idx:03}'
+        
+        ## get source information - add to pointing catalogue
+        source_info = get_source_info( source_file, sc_round=iteration )
+        pointing_cat = vstack([pointing_cat,source_info])
 
+        ## collapse the information - add to image catalogue
+        source_coll = collapse_source( source_info )
+        source_coll.add_column( [source], name='Source_id', index=0 )
+        source_coll.add_column( [pointing], name='Pointing' )
+        source_coll.add_column( [radius], name='Radius' )
+        source_coll.add_column( [iteration], name='SelfcalIteration' )
+        combined_cat = vstack( [combined_cat, source_coll] )
+
+
+    ## for testing
+    t_dr = []
+    t_rms = []
+    for source_file in sources:
+        drs = []
+        rmss = []
+        if os.path.exists( os.path.join( source_file, 'image_000-MFS-image-pb.fits' ) ):
+            imfiles = natural_sort( glob.glob( os.path.join( source_file, 'image_*-MFS-image-pb.fits' ) ) )
+        else:
+            imfiles = natural_sort( glob.glob( os.path.join( source_file, 'image_*-MFS-image.fits' ) ) )
+        for imfile in imfiles:
+            dr, rms = get_image_dynamicrange( imfile )
+            drs.append(dr)
+            rmss.append(rms)
+        t_dr.append(drs)
+        t_rms.append(rmss)
+
+    with open( 'iteration_info.csv', 'w' ) as f:
+        f.write('source,dr0,dr1,dr2,dr3,dr4,dr5,dr6,dr7,dr8,dr9,rms0,rms1,rms2,rms3,rms4,rms5,rms6,rms7,rms8,rms9\n')
+        for i in np.arange(0,len(sources)):
+            src = os.path.basename(sources[i])
+            a = [ str(val) for val in t_dr[i] ]
+            b = [ str(val) for val in t_rms[i] ]
+            f.write('{:s},{:s},{:s}\n'.format(src,','.join(a),','.join(b)) )
+
+
+    
+    ## join combined with lotss
+    for cn in combined_cat.colnames:
+        if cn in imcat.colnames:
+            combined_cat.rename_column( cn, '{:s}_HR'.format(cn) )
+    combined_cat.rename_column('Source_id_HR','Source_id')
+    
+    lotss_combined = join(left=imcat, right=combined_cat, keys='Source_id')
+    
+    ## write out catalogues
     pointing_cat.write(outcat,format='fits')
+    lotss_combined.write(outcat.replace('{:s}_'.format(pointing),'combined_'),format='fits')
+
 
 
 if __name__ == "__main__":
@@ -160,7 +288,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument( dest='pointing', type=str )
     parser.add_argument( '--outdir',type=str,default='catalogue',help='directory to store outputs')
-    parser.add_argument( '--catalogue-name',type=str,default='pointing_catalogue.fits',help='name of output catalogue file' )
+    parser.add_argument( '--catalogue-filestem',type=str,default='catalogue.fits',help='suffix of catalogue file' )
     parser.add_argument( '--update', action='store_true', default=False
     args = parser.parse_args()
     main( args.pointing, outdir=args.outdir, catfile=args.catalogue_name, update=args.update )
