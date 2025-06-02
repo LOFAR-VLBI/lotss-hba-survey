@@ -556,7 +556,7 @@ def check_field(field):
     for tmp_obsid in field_obsids:
         tmp_fieldobsid = '{:s}/{:s}'.format(field,tmp_obsid)
         ## check for presence of processing directories
-        tmp_outdir = glob.glob(os.path.join(os.getenv('DATA_DIR'),'processing',tmp_fieldobsid))
+        tmp_outdir = glob.glob(os.path.join(os.getenv('DATA_DIR'),'processing','{:s}*'.format(tmp_fieldobsid)))
         if len(tmp_outdir) > 0:
             ## check if directory is not empty
             contents = os.listdir(tmp_outdir[0])
