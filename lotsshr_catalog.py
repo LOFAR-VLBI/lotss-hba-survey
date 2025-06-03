@@ -312,7 +312,7 @@ if __name__ == "__main__":
     parser.add_argument( '--catalogue-filestem',type=str,default='catalogue.fits',help='suffix of catalogue file' )
     parser.add_argument( '--update', action='store_true', default=False )
     args = parser.parse_args()
-    main( args.pointing, outdir=args.outdir, catfile=args.catalogue_name, update=args.update )
+    main( args.pointing, outdir=args.outdir, catfile=args.catalogue_filestem, update=args.update )
 
     
 
