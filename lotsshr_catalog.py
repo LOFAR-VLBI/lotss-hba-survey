@@ -129,6 +129,11 @@ def get_component( src ):
     return(tmp)
 
 def get_source_info( source_file, sc_round='000' ):
+
+    ## bdsf settings
+    thresh_pix = 5
+    thresh_isl = 5
+
     ## source name
     source_name = os.path.basename(source_file)
     ## source detection images
@@ -137,11 +142,32 @@ def get_source_info( source_file, sc_round='000' ):
     ## fix image header 
     fix_imhead(appf)
     ## run pybdsf - use pb-corrected if it exists
-    if os.path.exists(imf):
+    if os.oath.exists(imf):
         fix_imhead(imf)
-        img = bdsf.process_image(imf, detection_image=appf, thresh_isl=thresh_isl, thresh_pix=thresh_pix, rms_box=(100,10), rms_map=True, mean_map='zero', ini_method='intensity', adaptive_rms_box=True, adaptive_thresh=150, rms_box_bright=(40,10), group_by_isl=False, group_tol=10.0, output_opts=True, output_all=False, atrous_do=True, atrous_jmax=4, flagging_opts=True, flag_maxsize_fwhm=0.5, advanced_opts=True, blank_limit=None, frequency=restfrq)
+        bdsf_im = imf
     else:
-        img = bdsf.process_image(appf, thresh_isl=thresh_isl, thresh_pix=thresh_pix, rms_box=(100,10), rms_map=True, mean_map='zero', ini_method='intensity', adaptive_rms_box=True, adaptive_thresh=150, rms_box_bright=(40,10), group_by_isl=False, group_tol=10.0, output_opts=True, output_all=False, atrous_do=True, atrous_jmax=4, flagging_opts=True, flag_maxsize_fwhm=0.5, advanced_opts=True, blank_limit=None, frequency=restfrq)
+        bdsf_im = appf
+
+    ## get the noise
+    imnoise = findrms( bdsf_im )
+
+    img = bdsf.process_image(bdsf_im, 
+                        adaptive_rms_box=True, 
+                        adaptive_thresh=100, 
+                        rms_box=(150,10), 
+                        rms_box_bright=(40,10),
+                        rms_map=False, 
+                        rms_value = imnoise,
+                        mean_map='zero', 
+                        thresh_isl=thresh_isl, 
+                        thresh_pix=thresh_pix, 
+                        group_by_isl=False,
+                        group_tol=10.0, 
+                        flagging_opts=True, 
+                        flag_maxsize_fwhm=0.5,
+                        atrous_do=True, 
+                        atrous_jmax=4)
+
     ## get a table of source information
     sources = img.sources
     source_table = Table()
@@ -153,11 +179,6 @@ def get_source_info( source_file, sc_round='000' ):
 def main( pointing, outdir='catalogue', catfile='catalogue.fits', update=False ):
 
     catfile = '{:s}_{:s}'.format(pointing,catfile)
-
-    ## bdsf settings
-    thresh_pix = 5
-    thresh_isl = 4
-    restfrq = 144000000.0
 
     ## pointing input file
     imcat_file = os.path.join(os.getenv('DATA_DIR'),pointing,'image_catalogue.csv')
