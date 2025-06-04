@@ -148,8 +148,15 @@ def get_source_info( source_file, sc_round='000' ):
     else:
         bdsf_im = appf
 
+    print(bdsf_im)
+
     ## get the noise
-    imnoise = findrms( bdsf_im )
+    with fits.open( bdsf_im ) as hdul:
+        imnoise = findrms(np.ndarray.flatten(hdul[0].data))
+        try:
+            reffreq = hdul[0].header['CRVAL3']
+        except:
+            reffreq = hdul[0].header['REF_FREQ']
 
     img = bdsf.process_image(bdsf_im, 
                         adaptive_rms_box=True, 
@@ -166,7 +173,8 @@ def get_source_info( source_file, sc_round='000' ):
                         flagging_opts=True, 
                         flag_maxsize_fwhm=0.5,
                         atrous_do=True, 
-                        atrous_jmax=4)
+                        atrous_jmax=4,
+                        frequency=reffreq)
 
     ## get a table of source information
     sources = img.sources
