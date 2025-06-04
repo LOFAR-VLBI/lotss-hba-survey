@@ -142,7 +142,7 @@ def get_source_info( source_file, sc_round='000' ):
     ## fix image header 
     fix_imhead(appf)
     ## run pybdsf - use pb-corrected if it exists
-    if os.oath.exists(imf):
+    if os.path.exists(imf):
         fix_imhead(imf)
         bdsf_im = imf
     else:
