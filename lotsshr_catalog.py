@@ -65,24 +65,36 @@ def fix_imhead( fitsfile ):
 def collapse_source( components ):
     ## sum total fluxes
     total_flux = np.sum( components['Total_flux'] )
-    e_total_flux = np.sqrt( np.sum( np.power( components['E_Total_flux'], 2. ) ) )
-    ## directly use peak flux
-    peak_flux = np.max( components['Peak_flux'] )
-    e_peak_flux = components['E_Peak_flux'][np.where( components['Peak_flux'] == peak_flux )[0]]
-    ## flux-weighted average of RA and DEC
-    ra_avg = np.average( components['RA'], weights=components['Total_flux'] )
-    dec_avg = np.average( components['DEC'], weights=components['Total_flux'] )
-    ## errors on the RA and DEC
-    e_ra_avg = np.sqrt( np.sum( np.power( components['E_RA'], 2. ) ) )
-    e_dec_avg = np.sqrt( np.sum( np.power( components['E_DEC'], 2. ) ) )
-    ## rms
-    isl_rms = np.mean( components['Isl_rms'] )
-    if len(components) > 1:
-        ncomp = len(components)
-        scode = 'M'
+    if total_flux > 0:
+        e_total_flux = np.sqrt( np.sum( np.power( components['E_Total_flux'], 2. ) ) )
+        ## directly use peak flux
+        peak_flux = np.max( components['Peak_flux'] )
+        e_peak_flux = components['E_Peak_flux'][np.where( components['Peak_flux'] == peak_flux )[0][0]]
+        ## flux-weighted average of RA and DEC
+        ra_avg = np.average( components['RA'], weights=components['Total_flux'] )
+        dec_avg = np.average( components['DEC'], weights=components['Total_flux'] )
+        ## errors on the RA and DEC
+        e_ra_avg = np.sqrt( np.sum( np.power( components['E_RA'], 2. ) ) )
+        e_dec_avg = np.sqrt( np.sum( np.power( components['E_DEC'], 2. ) ) )
+        ## rms
+        isl_rms = np.mean( components['Isl_rms'] )
+        if len(components) > 1:
+            ncomp = len(components)
+            scode = 'M'
+        else:
+            ncomp = 1
+            scode = components['S_Code'][0]
     else:
-        ncomp = 1
-        scode = components['S_Code'][0]
+        ra_avg = 0 
+        e_ra_avg = 0
+        dec_avg = 0
+        e_dec_avg = 0
+        e_total_flux = 0
+        peak_flux = 0
+        e_peak_flux = 0
+        isl_rms = 0
+        ncomp = 0
+        scode = 'X'
 
     ## size and PA ?
     #PA_avg = np.arctan2( np.sum( np.sin( components['PA']*np.pi/180.), np.sum( np.cos( components['PA']*np.pi/180. ) ) ) * 180. / np.pi
@@ -127,6 +139,33 @@ def get_component( src ):
     tmp.add_column( [src.rms_isl], name='Isl_rms' )
     tmp.add_column( [src.code], name='S_Code' )
     return(tmp)
+
+def add_zero_source( tmp ):
+    tmp.add_column( [0], name='component' )
+    tmp.add_column( [0.0], name='RA' )
+    tmp.add_column( [0.0], name='E_RA' )
+    tmp.add_column( [0.0], name='DEC' )
+    tmp.add_column( [0.0], name='E_DEC' )
+    tmp.add_column( [0.0], name='Total_flux' )
+    tmp.add_column( [0.0], name='E_Total_flux' )
+    tmp.add_column( [0.0], name='Peak_flux' )
+    tmp.add_column( [0.0], name='E_Peak_flux' )
+    tmp.add_column( [0.0], name='Maj' )
+    tmp.add_column( [0.0], name='E_Maj' )
+    tmp.add_column( [0.0], name='Min' )
+    tmp.add_column( [0.0], name='E_Min' )
+    tmp.add_column( [0.0], name='PA' )
+    tmp.add_column( [0.0], name='E_PA' )
+    tmp.add_column( [0.0], name='DC_Maj' )
+    tmp.add_column( [0.0], name='E_DC_Maj' )
+    tmp.add_column( [0.0], name='DC_Min' )
+    tmp.add_column( [0.0], name='E_DC_Min' )
+    tmp.add_column( [0.0], name='DC_PA' )
+    tmp.add_column( [0.0], name='E_DC_PA' )
+    tmp.add_column( [0.0], name='Isl_rms' )
+    tmp.add_column( ['X'], name='S_Code' )
+    return(tmp)
+
 
 def get_source_info( source_file, sc_round='000' ):
 
@@ -179,8 +218,11 @@ def get_source_info( source_file, sc_round='000' ):
     ## get a table of source information
     sources = img.sources
     source_table = Table()
-    for source in sources:
-        source_table = vstack([source_table,get_component(source)])
+    if len(sources) > 0:
+        for source in sources:
+            source_table = vstack([source_table,get_component(source)])
+    else:
+        source_table = add_zero_source(source_table)
     source_table.add_column(source_name, index=0, name='Source_id' )
     return( source_table ) 
 
@@ -228,7 +270,7 @@ def main( pointing, outdir='catalogue', catfile='catalogue.fits', update=False )
         idx = np.where(imcat['Source_id'] == source)[0]
         lotss_info = imcat[idx]
         majax = lotss_info['Majax']*u.arcsec
-        radius = lotss_info['Radius']
+        radius = lotss_info['Radius'][0]
         src_coords = SkyCoord( lotss_info['RA'], lotss_info['DEC'], unit='deg' )
 
 
@@ -253,9 +295,15 @@ def main( pointing, outdir='catalogue', catfile='catalogue.fits', update=False )
             drs.append(dr)
             rmss.append(rms)
 
-        ## decide which iteration to use with normalised combination
-        check_iter = drs / np.max(drs) + rmss / np.max(rmss)
-        iter_idx = np.where( check_iter == np.max(check_iter) )[0][0]
+        ## decide which iteration to use. 
+        ## best case: if max(DR) and min(rms) happen on the same iteration
+        best_dr = np.where( np.asarray(drs) == np.max(drs) )[0]
+        best_rms = np.where( np.asarray(rmss) == np.max(rmss) )[0]
+        if best_dr[0] == best_rms[0]:
+            iter_idx = best_dr[0]
+        else:
+            check_iter = drs / np.max(drs) + rmss / np.max(rmss)
+            iter_idx = np.where( check_iter == np.max(check_iter) )[0][0]
         iteration = f'{iter_idx:03}'
         
         ## get source information - add to pointing catalogue
@@ -268,6 +316,7 @@ def main( pointing, outdir='catalogue', catfile='catalogue.fits', update=False )
         source_coll.add_column( [pointing], name='Pointing' )
         source_coll.add_column( [radius], name='Radius' )
         source_coll.add_column( [iteration], name='SelfcalIteration' )
+        print(source_coll)
         combined_cat = vstack( [combined_cat, source_coll] )
 
 
