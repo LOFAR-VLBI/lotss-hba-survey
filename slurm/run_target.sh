@@ -38,7 +38,7 @@ mkdir -p ${TMPD}_interim
 mkdir -p ${LOGSDIR}
 
 ## location of LINC
-LINC_DATA_ROOT=${LINCDIR}
+export LINC_DATA_ROOT=${LINCDIR}
 
 # Pass along necessary variables to the container.
 CONTAINERSTR=$(singularity --version)

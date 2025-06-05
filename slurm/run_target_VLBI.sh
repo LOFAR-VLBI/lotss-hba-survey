@@ -38,7 +38,7 @@ mkdir -p ${TMPD}_interim
 mkdir -p ${LOGSDIR}
 
 ## location of LINC
-LINC_DATA_ROOT=${LINCDIR}
+export LINC_DATA_ROOT=${LINCDIR}
 
 # Pass along necessary variables to the container.
 CONTAINERSTR=$(singularity --version)
@@ -64,6 +64,7 @@ cd ${OUTDIR}
 
 ## pipeline input - will change based on Frits input
 apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py LINC target --output_fullres_data --target_skymodel ${DATADIR}/target.skymodel --min_unflagged_fraction 0.1 --cal_solutions ${DATADIR}/LINC-cal_solutions.h5 ${DATADIR} > create_mslist.log
+#apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py LINC target --output_fullres_data --target_skymodel ${DATADIR}/target.skymodel --min_unflagged_fraction 0.1 --make_structure_plot=False --cal_solutions ${DATADIR}/LINC-cal_solutions.h5 ${DATADIR} > create_mslist.log
 
 echo LINC starting
 TMPID=`echo ${OBSID} | cut -d'/' -f 1`

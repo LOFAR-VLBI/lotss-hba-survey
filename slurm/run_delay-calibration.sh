@@ -41,7 +41,7 @@ mkdir -p ${TMPD}_interim
 mkdir -p ${LOGSDIR}
 
 ## location of LINC
-LINC_DATA_ROOT=${LINCDIR}
+export LINC_DATA_ROOT=${LINCDIR}
 
 export APPTAINER_CACHEDIR=${SOFTWAREDIR}/singularity
 export APPTAINER_TMPDIR=${APPTAINER_CACHEDIR}/tmp
