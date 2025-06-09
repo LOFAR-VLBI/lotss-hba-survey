@@ -43,7 +43,7 @@ cd ${OUTDIR}
 TARGETMS=`ls -d ILTJ*`
 DDCALH5=`ls -d merged*h5`
 
-apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FACETSELFCAL}/facetselfcal.py ${TARGETMS} --helperscriptspath ${FACETSELFCAL} --helperscriptspathh5merge ${LOFARHELPERS} --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=56 --preapplyH5-list "["${DDCALH5}"]" > facet_selfcal.log 2>&1
+apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FACETSELFCAL}/facetselfcal.py ${TARGETMS} --helperscriptspath ${FACETSELFCAL} --helperscriptspathh5merge ${LOFARHELPERS} --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=56 --preapplyH5-list '["'${DDCALH5}'"]' > facet_selfcal.log 2>&1
 
 : << END
 ## check if it finishes 
