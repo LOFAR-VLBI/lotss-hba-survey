@@ -26,7 +26,7 @@ def main( pointing, phasediff_file ):
     phasediff = Table.read(phasediff_file,format='csv')
 
     ## find a good cutoff
-    test_cutoffs = np.arange(0.1,2.4,0.1)[::-1]
+    test_cutoffs = np.arange(0.4,2.4,0.1)[::-1]
     for tc in test_cutoffs:
         ddcal_idx = np.where(phasediff['spd_score'] < tc )[0]
         recal_idx = np.where(phasediff['spd_score'] >= tc )[0]
