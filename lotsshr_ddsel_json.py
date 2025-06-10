@@ -18,11 +18,11 @@ def main( selfcaldir ):
             else:
                 f.write(ss)
         f.write('  ],\n')
-        f.write('  "selfcal:": {\n')
+        f.write('  "selfcal": {\n')
         f.write('    "class": "Directory",\n')
         f.write('    "path": "{:s}"\n'.format(os.path.join(softwaredir,'lofar_facet_selfcal')))
         f.write('  },\n')
-        f.write('  "lofar_helpers:": {\n')
+        f.write('  "lofar_helpers": {\n')
         f.write('    "class": "Directory",\n')
         f.write('    "path": "{:s}"\n'.format(os.path.join(softwaredir,'lofar_helpers')))
         f.write('  }\n')
