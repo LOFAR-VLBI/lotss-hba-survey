@@ -7,7 +7,6 @@ import astropy.units as u
 import os, glob, re
 import matplotlib
 from matplotlib import pyplot as plt
-import aplpy
 import argparse
 
 ##############################################################
