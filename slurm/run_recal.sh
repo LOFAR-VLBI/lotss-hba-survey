@@ -33,7 +33,7 @@ TARGET=`echo ${TMP} | cut -d',' -f 1`
 DDCAL=`echo ${TMP} | cut -d',' -f 2`
 
 TARGETINMS=`ls -d ${DATADIR}/${TARGET}/ILTJ*`
-DDCALH5=`ls -d ${DATADIR}/${DDCAL}/merged*h5`
+DDCALH5=`ls -d ${DATADIR}/${DDCAL}/merged_s*h5`
 
 mkdir -p ${OUTDIR}
 cp -r ${TARGETINMS} ${OUTDIR}
