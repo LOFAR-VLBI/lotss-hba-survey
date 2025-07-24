@@ -213,6 +213,7 @@ def get_source_info( source_file, sc_round='000' ):
                         flag_maxsize_fwhm=0.5,
                         atrous_do=True, 
                         atrous_jmax=4,
+                        atrous_orig_isl=True,
                         frequency=reffreq)
 
     ## get a table of source information
