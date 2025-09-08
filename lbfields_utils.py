@@ -62,6 +62,8 @@ def restart_toil_job( field, obsid, workflow ):
     else:
         command = "sbatch -J {:s} {:s} restart_slurm.sh {:s}/{:s}".format(field, cluster_opts, field, obsid)
     update_status(field,'Queued')
+    os.system( 'rm {:s}'.format( os.path.join( os.getenv('DATA_DIR'),'processing',field,obsid,'finished.txt') ) )
+    os.system( 'rm {:s}'.format( os.path.join( os.getenv('DATA_DIR'),'processing',field,obsid,'job_output.txt') ) )
     if os.system(command):
         update_status(field,"Submission failed")
 
@@ -396,7 +398,8 @@ def get_juelich_macaroon( field ):
     proj_name = tmp[-1].split('/')[0]
     ## generate voms-proxy-init
     os.system( 'cat ~/macaroons/secret-file | voms-proxy-init --pwstdin --voms lofar:/lofar/user/sksp --valid 1680:0' )
-    mac_name = os.path.join( os.getenv('MACAROON_DIR'), '{:s}_juelich'.format(proj_name) )
+    #mac_name = os.path.join( os.getenv('MACAROON_DIR'), '{:s}_juelich'.format(proj_name) )
+    mac_name = '{:s}_juelich'.format(proj_name)
     os.system( 'get-macaroon --url https://dcache-lofar.fz-juelich.de:2882/pnfs/fz-juelich.de/data/lofar/ops/projects/{:s} --duration P7D --proxy --permissions READ_METADATA,DOWNLOAD --ip 0.0.0.0/0 --output rclone {:s}'.format( proj_name, mac_name ) )
     mac_name = mac_name + '.conf'
     return( mac_name )

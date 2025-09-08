@@ -2,7 +2,7 @@
 #SBATCH -N 1                  # number of nodes
 #SBATCH -c 1
 #SBATCH --ntasks=1            # number of tasks
-#SBATCH -t 24:00:00           # maximum run time in [HH:MM:SS] or [MM:SS] or [minutes]
+#SBATCH -t 48:00:00           # maximum run time in [HH:MM:SS] or [MM:SS] or [minutes]
 
 ## submit the job with OBSID as an argument
 OBSID=${1}
@@ -63,18 +63,22 @@ fi
 cd ${OUTDIR}
 
 ## pipeline input
-apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py LINC target --target_skymodel ${DATADIR}/target.skymodel --min_unflagged_fraction 0.1 --make_structure_plot False --cal_solutions ${DATADIR}/LINC-cal_solutions.h5 ${DATADIR} > create_mslist.log
+apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FLOCSDIR}/runners/create_ms_list.py LINC target --target_skymodel ${DATADIR}/target.skymodel --min_unflagged_fraction 0.1 --get_RM False --make_structure_plot False --cal_solutions ${DATADIR}/LINC-cal_solutions.h5 ${DATADIR} > create_mslist.log
 
 echo LINC starting
 TMPID=`echo ${OBSID} | cut -d'/' -f 1`
 
 ulimit -n 8192
 
-toil-cwl-runner --no-read-only --singularity --bypass-file-store --jobStore=${JOBSTORE} --logFile=${OUTDIR}/job_output.txt --workDir=${WORKDIR} --outdir=${OUTPUT} --retryCount=0 --writeLogsFromAllJobs=True --writeLogs=${LOGSDIR} --tmp-outdir-prefix=${TMPD}/ --coordinationDir=${OUTPUT} --tmpdir-prefix=${TMPD}_interim/ --disableAutoDeployment=True --preserve-environment ${APPTAINERENV_PYTHONPATH} ${SINGULARITYENV_PREPEND_PATH} ${APPTAINERENV_LINC_DATA_ROOT} ${APPTAINER_BIND} ${APPTAINER_PULLDIR} ${APPTAINER_TMPDIR} ${APPTAINER_CACHEDIR} --batchSystem=slurm ${LINC_DATA_ROOT}/workflows/HBA_target.cwl mslist_LINC_target.json
+toil-cwl-runner --no-read-only --singularity --bypass-file-store --moveExports --no-compute-checksum --jobStore=${JOBSTORE} --logFile=${OUTDIR}/job_output.txt --workDir=${WORKDIR} --outdir=${OUTPUT} --retryCount=0 --writeLogsFromAllJobs=True --writeLogs=${LOGSDIR} --tmp-outdir-prefix=${TMPD}/ --coordinationDir=${OUTPUT} --tmpdir-prefix=${TMPD}_interim/ --disableAutoDeployment=True --preserve-environment ${APPTAINERENV_PYTHONPATH} ${SINGULARITYENV_PREPEND_PATH} ${APPTAINERENV_LINC_DATA_ROOT} ${APPTAINER_BIND} ${APPTAINER_PULLDIR} ${APPTAINER_TMPDIR} ${APPTAINER_CACHEDIR} --batchSystem=slurm ${LINC_DATA_ROOT}/workflows/HBA_target.cwl mslist_LINC_target.json
 
 if grep 'CWL run complete' ${OUTDIR}/job_output.txt
 then 
 	echo 'SUCCESS: Pipeline finished successfully' > ${OUTDIR}/finished.txt
+elif
+	grep 'Finished toil run successfully' ${OUTDIR}/job_output.txt
+then
+        echo 'SUCCESS: Pipeline finished successfully' > ${OUTDIR}/finished.txt
 else
 	echo "**FAILURE**: Pipeline failed with exit status: ${?}" > ${OUTDIR}/finished.txt
 fi
