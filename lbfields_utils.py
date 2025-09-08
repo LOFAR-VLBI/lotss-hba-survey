@@ -546,6 +546,9 @@ def get_workflow_obsid(outdir):
         for line in f:
             if 'Resolved' in line:
                 break
+            elif 'Workflow' in line:
+                if '.cwl' in line:
+                    break
     tmp = line.split('.cwl')
     workflow = os.path.basename(tmp[0])
     obsid = os.path.basename(outdir).split("_")[0]
