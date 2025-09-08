@@ -71,7 +71,7 @@ TMPID=`echo ${OBSID} | cut -d'/' -f 1`
 
 ulimit -n 8192
 
-toil-cwl-runner --no-read-only --singularity --bypass-file-store --moveExports --jobStore=${JOBSTORE} --logFile=${OUTDIR}/job_output.txt --workDir=${WORKDIR} --outdir=${OUTPUT} --retryCount=0 --writeLogsFromAllJobs=True --writeLogs=${LOGSDIR} --tmp-outdir-prefix=${TMPD}/ --coordinationDir=${OUTPUT} --tmpdir-prefix=${TMPD}_interim/ --disableAutoDeployment=True --preserve-environment ${APPTAINERENV_PYTHONPATH} ${SINGULARITYENV_PREPEND_PATH} ${APPTAINERENV_LINC_DATA_ROOT} ${APPTAINER_BIND} ${APPTAINER_PULLDIR} ${APPTAINER_TMPDIR} ${APPTAINER_CACHEDIR} --batchSystem=slurm ${LINC_DATA_ROOT}/workflows/HBA_target_VLBI.cwl mslist_LINC_target.json 
+toil-cwl-runner --no-read-only --singularity --bypass-file-store --moveExports --jobStore=${JOBSTORE} --logFile=${OUTDIR}/job_output.txt --workDir=${WORKDIR} --outdir=${OUTPUT} --retryCount=0 --writeLogsFromAllJobs=True --writeLogs=${LOGSDIR} --tmp-outdir-prefix=${TMPD}/ --tmpdir-prefix=${TMPD}_interim/ --disableAutoDeployment=True --preserve-environment ${APPTAINERENV_PYTHONPATH} ${SINGULARITYENV_PREPEND_PATH} ${APPTAINERENV_LINC_DATA_ROOT} ${APPTAINER_BIND} ${APPTAINER_PULLDIR} ${APPTAINER_TMPDIR} ${APPTAINER_CACHEDIR} --batchSystem=slurm ${LINC_DATA_ROOT}/workflows/HBA_target_VLBI.cwl mslist_LINC_target.json 
 ## check if anything has changed ... 
 
 if grep 'CWL run complete' ${OUTDIR}/job_output.txt
