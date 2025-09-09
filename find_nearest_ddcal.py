@@ -1,4 +1,3 @@
-import bdsf
 from astropy.table import Table, vstack, join
 from astropy.io import fits
 import numpy as np
