@@ -24,7 +24,8 @@ def main( pointing, phasediff_file ):
     phasediff = Table.read(phasediff_file,format='csv')
 
     ## find a good cutoff
-    test_cutoffs = np.arange(0.4,2.4,0.1)[::-1]
+    mintest = np.max((np.min(phasediff['spd_score']),0.4))
+    test_cutoffs = np.arange(mintest,np.max(phasediff['spd_score']),0.1)[::-1]
     for tc in test_cutoffs:
         ddcal_idx = np.where(phasediff['spd_score'] < tc )[0]
         recal_idx = np.where(phasediff['spd_score'] >= tc )[0]
@@ -40,6 +41,9 @@ def main( pointing, phasediff_file ):
         print(np.max(test_separations))
         if np.max(test_separations) < 0.5:
             cutoff = tc
+
+    sbsizex=0.8
+    sbsizey=sbsizex
 
     ## plotting
     fig = plt.figure(figsize=(20,10))
