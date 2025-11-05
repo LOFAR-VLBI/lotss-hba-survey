@@ -41,6 +41,9 @@ def main( pointing, phasediff_file ):
         if np.max(test_separations) < 0.5:
             cutoff = tc
 
+    sbsizex = 0.8
+    sbsizey = sbsizex
+
     ## plotting
     fig = plt.figure(figsize=(20,10))
     p1 = plt.axes([0.05,0.1,sbsizex*5/10,sbsizey])

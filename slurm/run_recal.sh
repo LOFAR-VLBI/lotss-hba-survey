@@ -45,7 +45,6 @@ DDCALH5=`ls -d merged*h5`
 
 apptainer exec -B ${PWD},${BINDPATHS} --no-home ${LOFAR_SINGULARITY} python3 ${FACETSELFCAL}/facetselfcal.py ${TARGETMS} --helperscriptspath ${FACETSELFCAL} --helperscriptspathh5merge ${LOFARHELPERS} --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=56 --preapplyH5-list '["'${DDCALH5}'"]' > facet_selfcal.log 2>&1
 
-: << END
 ## check if it finishes 
 if compgen -G "merged_selfcalcycle*h5" > /dev/null; then
     ## find the last cycle to run to copy over
@@ -67,6 +66,11 @@ if compgen -G "merged_selfcalcycle*h5" > /dev/null; then
 	ILTJ=`ls -d ILTJ*ms | cut -d'_' -f 1`
 	mkdir ${ILTJ}
 	mv * ${ILTJ}/
+	# make directory for the first selfcal and move stuff there
+	mkdir ${DATADIR}/${ILTJ}/first_selfcal
+	mv ${DATADIR}/${ILTJ}/* ${DATADIR}/${ILTJ}/first_selfcal/
+	# now move the new stuff to the data directory
+	mv ${ILTJ}/* ${DATADIR}/${ILTJ}/
 	echo 'SUCCESS: Pipeline finished successfully' > ${OUTDIR}/finished.txt
 	echo 'Resolved /fake/workflow/selfcal.cwl' > ${OUTDIR}/job_output.txt
 elif cat facet_selfcal.log | grep -q "FAILED"; then
@@ -77,4 +81,3 @@ else
     echo "**FAILURE**: Pipeline failed" > ${OUTDIR}/finished.txt
 	echo 'Resolved /fake/workflow/selfcal.cwl' > ${OUTDIR}/job_output.txt
 fi
-END
