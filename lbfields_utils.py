@@ -623,7 +623,7 @@ def cleanup_step(field, fieldobsid):
         ## remove data from previous step if required
         if workflow in ['setup','delay-calibration','target_VLBI']:
             os.system('rm -r {:s}'.format(os.path.join(field_datadir, '*.MS')))
-        if workflow in ['HBA_target']:
+        if workflow in ['HBA_target','target_VLBI']:
             os.system('cp {:s} {:s}'.format(os.path.join(workflowdir,'LINC-cal_solutions.h5'),os.path.join(field_datadir,'LINC-target_solutions.h5')))
             ## a results sub-directory in the results directory in 
         if workflow in ['concatenate-flag']:
