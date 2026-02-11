@@ -21,6 +21,7 @@ from tasklist import *
 from calibrator_utils import *
 from plot_field import *
 import numpy as np
+from flocs_lta import flocs_search_lta
 
 
 def update_status(name,status,stage_id=None,time=None,workdir=None,av=None,survey=None):
@@ -230,61 +231,74 @@ def collect_solutions( caldir ):
 ## staging
 
 def stage_field( name, survey=None ):
+    ## get the observation ids 
     with SurveysDB(survey=survey) as sdb:
-        idd = sdb.db_get('lb_fields',name)
-    ## currently srmfile is 'multi' if the field has more than one observation
-    srmfilename = idd['srmfile']
-    if srmfilename == 'multi':
-        with SurveysDB(survey=survey) as sdb:
-            sdb.cur.execute('select * from observations where field=%s',(name,))
-            obs = sdb.cur.fetchall()
-        obs_ok = 0
-        # check how many observations there really are, as opposed to failed on
-        for nobs in range(len(obs)):
-            if obs[nobs]['status'] in ['Archived','DI_Processed']:
-                obs_ok+=1
-                nobs_ok=nobs
-        # If really only 1 observation, construct its srmfile and proceed
-        if obs_ok==1:
-            srmfilename = 'https://public.spider.surfsara.nl/project/lotss/shimwell/LINC/srmfiles/srm%d.txt'%(obs[nobs_ok]['id'])
-            srmfilenames = [srmfilename]
-        else:
-            ## get the srm files and return an array
-            srmfilenames = []
-            for o in obs:
-                srmfilenames.append( 'https://public.spider.surfsara.nl/project/lotss/shimwell/LINC/srmfiles/srm%d.txt'%(o['id']) )
-    uris_to_stage = []
-    for srmfile in srmfilenames:
-        response = requests.get(srmfile) 
-        data = response.text
-        uris = data.rstrip('\n').split('\n')
-        uris_to_stage = uris_to_stage + uris
-    ## get obsid(s) and create a directory/directories
+        sdb.cur.execute('select * from observations where field=%s',(name,))
+        obs = sdb.cur.fetchall()
+    ## get the observation ids which are not failed
     obsids = []
-    for uri in uris_to_stage:
-        obsids.append(uri.split('/')[-2])
-    obsids = np.unique(obsids)
-    tmp = os.path.join(str(os.getenv('DATA_DIR')),str(name))
+    for nobs in range(len(obs)):
+        if obs[nobs]['status'] in ['Archived','DI_Processed']:
+            obsids.append(obs[nobs]['id'])
+    ## the field directory
+    fielddir = os.path.join(str(os.getenv('DATA_DIR')),str(name))
     caldirs = []
-    for obsid in obsids:    
-        caldir = os.path.join(tmp,obsid)
-        ## if directory already exists, it is possible that some things have already been staged
-        if os.path.exists(caldir):
-            tarfiles = glob.glob(os.path.join(caldir,'*.tar'))
-            trfs = [ val.split('/')[-1] for val in tarfiles ]
-            ## remove the already downloaded files from uris_to_stage ... 
-            idxs = [ i for i,val in enumerate(uris_to_stage) if val.split('/')[-1] in trfs ]
-            for idx in idxs:
-                uris_to_stage.pop(idx)
+    csrmfiles = []
+    for obsid in obsids:
+        caldir = os.path.join(fielddir, obsid)
+        srmfile = 'srms_{:s}.txt'.format(obsid)
+        csrmfile = os.path.join(caldir,srmfile)
+        csrmfiles.append(csrmfile)
+        if not os.path.exists(caldir):
+            os.makedirs(caldir)
+            flocs_search_lta.main( sasid=obsid, freq_end=168., stage=False )
+            os.system('mv {:s} {:s}/{:s}'.format(srmfile, csrmfile))
         else:
-            os.makedirs(caldir) 
-        caldirs.append(caldir)
-    stage_id = stager_access.stage(uris_to_stage)
-    update_status(name, 'Staging', stage_id=stage_id )
+            if os.path.exists(csrmfile):
+                with open(csrmfile,'r') as f:
+                    lines = f.readlines()
+                uris = [ line.rstrip('\n') for line in lines ]
+                tarfiles = glob.glob(os.path.join(caldir,'*.tar'))
+                trfs = [ val.split('/')[-1] for val in tarfiles ]
+                ## remove the already downloaded files from uris_to_stage ...
+                idxs = [ i for i,val in enumerate(uris_to_stage) if val.split('/')[-1] in trfs ]
+                for idx in idxs:
+                    uris.pop(idx)
+                with open(csrmfile,'w') as f:
+                    for uri in uris:
+                        f.write(uri)
+                        f.write('\n')
+            else:
+                flocs_search_lta.main( sasid=obsid, freq_end=168., stage=False )
+                os.system('mv {:s} {:s}/{:s}'.format(srmfile, csrmfile ))
+    ## now collect everything that needs to be staged
+    uris = []
+    for csrmfile in csrmfiles:
+        with open(csrmfile,'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            uris.append(line.rstrip('\n'))
+
+    stage_id = stager_access.stage(uris)
+    update_status(name,'Staging', stage_id = stage_id )
     return(caldirs)
 
 ##############################
 ## downloading
+
+def make_macaroon_file( obsid, site, url, macdict ):
+    for mac in macdict:
+        try: 
+            bearer_token = mac[site]
+        except:
+            print('Token not found for {:s}'.format(site))
+    macname = obsid + '.conf'
+    with open( macname, 'w' ) as f:
+        f.write( 'type = webdav\n' )
+        f.write( 'vendor = other\n' )
+        f.write( 'url = {:s}\n'.format(url) )
+        f.write( 'bearer_token = {:s}'.format(bearer_token) )
+    return(macname)
 
 def do_download( name ):
     basedir = os.getenv('DATA_DIR')
@@ -293,60 +307,33 @@ def do_download( name ):
     with SurveysDB(readonly=True) as sdb:
         idd=sdb.db_get('lb_fields',name)
         stage_id = idd['staging_id']
-    ## get the surls from the stager API
     surls = stager_access.get_surls_online(stage_id)
+    macaroons = stager_access.get_macaroons(stage_id)
+    
     if len(surls) == 0:
         print('Something went wrong with the download for {:s} (staging id {:s})'.format(name,str(stage_id)))
         update_status(name,'Download failed')
     else:
-        ## assuming these are from the same project, but that's not necessarily true
-        project = surls[0].split('/')[-3]
-        ## get unique obsids
         tmp_obsids = [ val.split('/')[-2] for val in surls ]
         obsids = np.unique(tmp_obsids)
         all_tarfiles = []
         for obsid in obsids:
-            obsid_path = os.path.join(project,obsid)
             tmp = os.path.join(str(os.getenv('DATA_DIR')),str(name))
             caldir = os.path.join(tmp,obsid)
             obsid_surls = [ surl for surl in surls if obsid in surl ]
-            if 'psnc' in obsid_surls[0]:
-                print('Poznan download:',obsid_surls[0])
-                if 'NO_GRID' in os.environ:
-                    auth=None
-                    # Poznan requires username and password, which are in your .stagingrc
-                    # Rudimentary parsing of this needed...
-                    if os.path.isfile(os.getenv('HOME')+'/.stagingrc'):
-                        user=None
-                        password=None
-                        with open(os.getenv('HOME')+'/.stagingrc','r') as f:
-                            lines = f.readlines()
-                        for l in lines:
-                            if '=' in l:
-                                bits=l.split('=')
-                                if bits[0]=='user': user=bits[1].rstrip('\n')
-                                if bits[0]=='password': password=bits[1].rstrip('\n')
-                        if user and password:
-                            auth=(user,password)
-                        else:
-                            print('*** Warning: failed to parse stagingrc, download will fail ***')
-                    logfile=None
-                    prefix="https://lta-download.lofar.psnc.pl/lofigrid/SRMFifoGet.py?surl="
-                    for surl in obsid_surls:
-                        dest = os.path.join(caldir,os.path.basename(surl))
-                        if not os.path.isfile(dest):
-                            download_file(prefix+surl,dest,retry_partial=True,progress_bar=True,retry_size=1024,auth=auth)
-                        else:
-                            print(dest,'exists already, not downloading')
-                else:
-                    for surl in obsid_surls:
-                        dest = os.path.join(caldir,os.path.basename(surl))
-                        os.system('gfal-copy {:s} {:s} > {:s}_gfal.log 2>&1'.format(surl.replace('srm://lta-head.lofar.psnc.pl:8443','gsiftp://gridftp.lofar.psnc.pl:2811'),dest,name))
-                    os.system('rm {:s}_gfal.log'.format(name))
+            ## get project
+            project = surls[0].split('projects/')[-1].split('/')[0]
+            url = ':'.join(surls[0].split(':')[0:2]) + ':' + surls[0].split(':')[-1].split('/')[0]
+
             if 'juelich' in obsid_surls[0]:
-                ## rclone / macaroon - NOTE: project-specific macaroon generated; requires grid certificate
-                files = [ val.split('8443')[-1] for val in obsid_surls ]
-                mac_name = get_juelich_macaroon( name )
+                mac_name = make_macaroon_file( obsid, 'Juelich', url, macaroons )
+            elif 'psnc' in obsid_surls[0]:
+                mac_name = make_macaroon_file( obsid, 'Poznan', url, macaroons )
+            if 'surf' in obsid_surls[0]:
+                mac_name = make_macaroon_file( obsid, 'SURF', url, macaroons )
+
+            if os.path.exists(mac_name):
+                files = [ project+val.split(project)[-1] for val in obsid_surls ]
                 rc = RClone( mac_name, debug=True)
                 rc.get_remote()
                 for f in files:
@@ -354,25 +341,16 @@ def do_download( name ):
                 if d['err'] or d['code']!=0:
                     update_status(field,'rclone failed')
                     print('Rclone failed for field {:s}'.format(field))
-                os.system('rm *juelich.conf')
-            if 'sara' in obsid_surls[0]:
-                ## rclone / macaroon - NOTE: can use macaroon generated by someone else
-                files = [ os.path.basename(val) for val in obsid_surls ]
-                lta_macaroon = glob.glob(os.path.join(os.getenv('MACAROON_DIR'),'*LTA.conf'))[0]
-                rc = RClone( lta_macaroon, debug=True )
-                rc.get_remote()
-                #d = rc.multicopy(rc.remote+obsid_path,files,caldir) ## do not use as there are issues
-                for f in files:
-                    d = rc.execute(['-P','copy',rc.remote + os.path.join(obsid_path,f)]+[caldir]) 
-                if d['err'] or d['code']!=0:
-                    update_status(field,'rclone failed')
-                    print('Rclone failed for field {:s}'.format(name))
-            ## check that everything was downloaded
-            tarfiles = check_tarfiles( caldir )
-            all_tarfiles = all_tarfiles + tarfiles
-        if len(all_tarfiles) == len(surls):
-            print('Download successful for {:s}'.format(name) )
-            update_status(name,'Downloaded',stage_id=0)
+                os.system('rm {:s}'.format(mac_name))
+                ## check that everything was downloaded
+                tarfiles = check_tarfiles( caldir )
+                all_tarfiles = all_tarfiles + tarfiles
+                if len(all_tarfiles) == len(surls):
+                    print('Download successful for {:s}'.format(name) )
+                    update_status(name,'Downloaded',stage_id=0)
+            else:
+                print('Failed to create macaroon')
+                update_status(name,'Macaroon failed')
 
 def check_tarfiles( caldir ):
     trfs = glob.glob(os.path.join(caldir,'*tar'))
@@ -387,22 +365,6 @@ def check_tarfiles( caldir ):
     os.system('rm tmp.txt')    
     trfs = glob.glob(os.path.join(caldir,'*tar'))
     return(trfs)
-
-def get_juelich_macaroon( field ):
-    ## get project name
-    with SurveysDB(readonly=True) as sdb:
-        idd=sdb.db_get('lb_fields',field)
-        stage_id = idd['staging_id']
-    surls = stager_access.get_surls_online(stage_id)
-    tmp = surls[0].split('projects/')
-    proj_name = tmp[-1].split('/')[0]
-    ## generate voms-proxy-init
-    os.system( 'cat ~/macaroons/secret-file | voms-proxy-init --pwstdin --voms lofar:/lofar/user/sksp --valid 1680:0' )
-    #mac_name = os.path.join( os.getenv('MACAROON_DIR'), '{:s}_juelich'.format(proj_name) )
-    mac_name = '{:s}_juelich'.format(proj_name)
-    os.system( 'get-macaroon --url https://dcache-lofar.fz-juelich.de:2882/pnfs/fz-juelich.de/data/lofar/ops/projects/{:s} --duration P7D --proxy --permissions READ_METADATA,DOWNLOAD --ip 0.0.0.0/0 --output rclone {:s}'.format( proj_name, mac_name ) )
-    mac_name = mac_name + '.conf'
-    return( mac_name )
 
 ##############################
 ## unpacking
@@ -440,7 +402,6 @@ def dysco_compress_job(caldir):
 
 def do_unpack(field):
     update_status(field,'Unpacking')
-    do_dysco=False # Default should be false
     caldir = os.path.join(str(os.getenv('DATA_DIR')),field)
     obsdirs = glob.glob(os.path.join(caldir,'*'))
     tmp = [ val for val in obsdirs if os.path.isdir(val) ]
@@ -448,39 +409,24 @@ def do_unpack(field):
     for obsdir in obsdirs:
         ## get the tarfiles
         tarfiles = glob.glob(os.path.join(obsdir,'*tar'))
-        ## check if needs dysco compression
-        gb_filesize = os.path.getsize(tarfiles[0])/(1024*1024*1024)
-        ## update the above to be non-hacky
-        if gb_filesize > 40.:
-            do_dysco = True
-        if os.getenv("UNPACK_AS_JOB"):
-            # Logic for Unpacking Jobs - uses untar.sh and dysco.sh
-            for trf in tarfiles:
-                os.system('sbatch {:s} -W {:s}/lotss-hba-survey/slurm/untar.sh {:s} {:s}'.format(os.getenv('CLUSTER_OPTS'),os.getenv("SOFTWAREDIR"), trf, field))
-                #msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
-                #os.system( 'mv {:s} {:s}'.format(msname,obsdir))
-            if do_dysco:
-                dysco_success = dysco_compress_job(obsdir)
-        else:
-            for trf in tarfiles:
-                os.system( 'tar -xvf {:s} >> {:s}_unpack.log 2>&1'.format(trf,field) )
-                msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
-                os.system( 'mv {:s} {:s}'.format(msname,obsdir))
-                if do_dysco:
-                    dysco_success = dysco_compress(obsdir,msname)
-                    ## ONLY FOR NOW
-                    if dysco_success:
-                        os.system('rm {:s}'.format(trf))
+        for trf in tarfiles:
+            with open('unpack_{:s}.sh'.format(field),'w') as f:
+                f.write('#!/bin/bash -l\n\n')
+                f.write('#SBATCH --ntasks=1\n')
+                f.write('#SBATCH --cpus-per-task=1\n')
+                f.write('#SBATCH --job-name=untar\n')
+                f.write('#SBATCH -t 4:00:00\n\n')
+                f.write('OUTDIR={:s}\n'.format(os.path.dirname(trf)))
+                f.write('cd ${OUTDIR}\n')
+                f.write("apptainer exec -B {:s},{:s} {:s} python3 {:s}/lotss-hba-survey/unpack_and_dysco_compress.py {:s}".format(os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR'),os.getenv('LOFAR_SINGULARITY'),os.getenv('SOFTWAREDIR'),trf))
+            os.system('sbatch {:s} -W unpack_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),field) )
     ## check that everything unpacked
     success = 0    
     for obsdir in obsdirs:
-        msfiles = glob.glob('{:s}/L*MS'.format(obsdir))
-        tarfiles = glob.glob( '{:s}/L*tar'.format(obsdir))
-        if len(msfiles) == len(tarfiles):
-            success = success + 1    
-            os.system('rm {:s}/*.tar'.format(obsdir))
+        failed = glob.glob(os.path.join(obsdir,'failed*txt'))[0]
+        if len(failed) == 0:
+            success += 1
     if success == len(obsdirs):
-        os.system('rm {:s}_unpack.log'.format(field))
         update_status(field,'Unpacked')
     else:
         update_status(field,'Unpack failed')    
