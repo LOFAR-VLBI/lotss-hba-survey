@@ -54,6 +54,7 @@ unpack_thread=None
 unpack_name=None
 verify_thread=None
 verify_name=None
+
 totallimit=20
 staginglimit=0 #2
 maxstaged=6
@@ -83,25 +84,13 @@ Logic is as follows:
 
 4. any Unpacked dataset can have processing run on it. Set status to Started on start. (status set to Verified on upload)
 
-    Processing:
-        - pre-facet-target (if needed)
-            --> verify, tidy
-        - ddf-pipeline light (if needed)
-            --> verify, tidy
-        - delay calibration
-            --> verify, tidy
-        - split directions
-            --> verify, tidy
-        - 1" imaging 
-            --> verify, tidy
-
 5. upload data products back
 '''
 
 while True:
 
+    ## collect information on what's started 
     with SurveysDB(readonly=True) as sdb:
-        #### CHANGE QUERIES TO USE TARGET TABLE
         sdb.cur.execute('select * from lb_fields where clustername="'+cluster+'" and username="'+user+'" order by priority,id')
         result=sdb.cur.fetchall()
         sdb.cur.execute('select * from lb_fields where status="Not started" and priority>0 order by priority,id')
@@ -132,12 +121,14 @@ while True:
         if 'ailed' in k:
             failed+=d[k]
 
+    ## print out the information
     print()
     ksum=(len(glob.glob(basedir+'/*'))-4)-failed
     if ksum<0: ksum=0
     print(ksum,'live directories out of',totallimit)
     print('Next field to work on is',nextfield)
 
+    ## check what's already running
     if solutions_thread is not None:
         print('Solutions thread is running (%s)' % solutions_name)
     if download_thread is not None:
@@ -149,22 +140,19 @@ while True:
     if verify_thread is not None:
         print('Verify thread is running (%s)' % verify_name)
 
+    ## check if anything has terminated
     if solutions_thread is not None and not solutions_thread.is_alive():
         print('Solutions thread seems to have terminated')
         solutions_thread=None
-
     if download_thread is not None and not download_thread.is_alive():
         print('Download thread seems to have terminated')
         download_thread=None
-
     if unpack_thread is not None and not unpack_thread.is_alive():
         print('Unpack thread seems to have terminated')
         unpack_thread=None
-
     if stage_thread is not None and not stage_thread.is_alive():
         print('Stage thread seems to have terminated')
         stage_thread=None
-
     if verify_thread is not None and not verify_thread.is_alive():
         print('Verify thread seems to have terminated')
         verify_thread=None
@@ -196,7 +184,7 @@ while True:
              im_radius=1.24, bright_limit_Jy=5., lotss_result_file='image_catalogue.csv', delay_cals_file='delay_calibrators.csv', 
              match_tolerance=5., image_limit_Jy=0.01, vlass=True, html=False, outdir=os.path.dirname(solutions_names[0]) )
 
-    ## for things that are staging, calculate 
+    ## for things that are staging, check the status 
     if 'Staging' in d.keys():
         ## get the staging ids and then check if they are complete
         for field in fd['Staging']:
@@ -211,26 +199,29 @@ while True:
             else:
                 print('Staging for {:s} is {:s} (staging id {:s})'.format(field,stage_status,str(s)))
 
-    ## this does one download at a time
+    ## for things that are staged, start downloading 
+    ## if there is not already a download going (one downnload at time allowed)
     if ksum<totallimit and 'Staged' in d and download_thread is None:
         download_name=fd['Staged'][0]
         print('We need to download a new file (%s)!' % download_name)
-        ## probably want to pass the staging id here
         download_thread=threading.Thread(target=do_download, args=(download_name,))
         download_thread.start()
 
-    ## unpacking the files
+    ## unpack the files if downloaded
     if 'Downloaded' in d and unpack_thread is None:
         unpack_name=fd['Downloaded'][0]
         print('We need to unpack a new file (%s)!' % unpack_name)
         unpack_thread=threading.Thread(target=do_unpack, args=(unpack_name,))
         unpack_thread.start()
 
+    ## get number of things that are queued
+    if 'Queued' in d:
+        nq = d['Queued']
+    else:
+        nq = 0
+
+    ## if unpacked, start the processing
     if 'Unpacked' in d:
-        if 'Queued' in d:
-            nq = d['Queued']
-        else:
-            nq = 0
         for field in fd['Unpacked']:
             if nq > maxqueue:
                 print( 'Queue is full, {:s} waiting for submission'.format(field) )
@@ -241,25 +232,16 @@ while True:
                 for obsid in field_obsids:
                     next_task = get_task_list(obsid)[0]
                     print('next task is',next_task)
-                    if next_task == "target_VLBI":
-                        get_linc_inputs( field, obsid )                        
-                    update_status(field,'Queued')
                     fieldobsid = '{:s}/{:s}'.format(field,obsid)
-                    if 'ddf' in next_task:
-                        cluster_opts = os.getenv('DDF_CLUSTER_OPTS')
-                    else:
-                        cluster_opts = os.getenv('CLUSTER_OPTS')
-                    if 'split-directions' in next_task:
-                        command = chunk_imagecat( fieldobsid )
-                    else:            
-                        command = "sbatch -J {:s} {:s} {:s}/lotss-hba-survey/slurm/run_{:s}.sh {:s}".format(field, cluster_opts, str(softwaredir).rstrip('/'), next_task, fieldobsid)
-                    ## will need run scripts for each task
-                    if os.system(command):
-                        update_status(field,"Submission failed")
+                    ## multiprocessing to run the task
+                    run_task( fieldobsid, next_task )
+                    ## NEED TO FIX
+                    update_status(field,"Submission failed")
 
     if 'Queued' in d:
         for field in fd['Queued']:
-            print('Verifying processing for',field)      
+            print('Verifying processing for',field)
+            ## will need to fix this
             result, workflow, obsid = check_field(field)
             if result == 'Running':
                 pass
@@ -273,20 +255,7 @@ while True:
                 if len(remaining_tasks) > 0:
                     next_task = remaining_tasks[0]
                     fieldobsid = '{:s}/{:s}'.format(field,obsid)
-                    if next_task == 'delay':
-                        update_status(field,'DelayCheck')
-                    else:
-                        cluster_opts = os.getenv('CLUSTER_OPTS')
-                        command = "sbatch -J {:s} {:s} {:s}/lotss-hba-survey/slurm/run_{:s}.sh {:s}".format(field, cluster_opts, str(softwaredir).rstrip('/'), next_task, fieldobsid)
-                        if next_task == 'selfcal':
-                            ## get length of array
-                            msfiles = glob.glob( os.path.join( os.getenv('DATA_DIR'), fieldobsid, 'split-directions', 'ILTJ*' ) )
-                            with open( os.path.join( os.path.dirname(msfiles[0]), 'targetlist.txt' ), 'w' ) as f:
-                                for msfile in msfiles:
-                                    f.write('{:s}\n'.format(msfile) )
-                            command = command.replace( '.out ', '.out --array=1-{:s}%10 '.format(str(len(msfiles))) )
-                        if os.system(command):
-                            update_status(field,"Submission failed")
+                    run_task( fieldobsid, next_task )
                 else:
                     update_status(field,'Verified')  
             else:

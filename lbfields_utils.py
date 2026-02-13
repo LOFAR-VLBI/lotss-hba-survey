@@ -43,6 +43,11 @@ def update_status(name,status,stage_id=None,time=None,workdir=None,av=None,surve
 ##############################
 ## job management
 
+def run_apptainer( command ):
+    singularity = os.getenv('LOFAR_SNGULARITY')
+    bindpaths = ','.join([os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR')])
+    os.system( 'apptainer exec -B {:s} --no-home {:s} {:s}'.format( bindpaths, singularity, command )
+
 def restart_toil_job( field, obsid, workflow ):
     softwaredir = os.getenv('SOFTWAREDIR')
     slurmscript = os.path.join( softwaredir, 'lotss-hba-survey/slurm', 'run_{:s}.sh'.format( workflow.replace('HBA_','' ) ) )
@@ -110,44 +115,109 @@ def collect_solutions_lhr( caldir ):
         fld = sdb.cur.fetchall()
     calibrator_id = fld[0]['calibrator_id']
 
-    ## check if linc/prefactor 3 has been run
-    linc_check, macname = get_linc( obsid, caldir )    
-    if linc_check: 
+    ## get the calibrator solutions
+    result = download_field_calibrators(obsid,caldir)
+    solutions = unpack_calibrator_sols(caldir,result)
+    if len(solutions) >= 1:
+        print('One or more calibrator found, comparing solutions ...')
+        best_sols = compare_solutions(solutions)
+        print('Best solutions are {:s}, cleaning up others.'.format(best_sols[0]))
+        os.system('cp {:s} {:s}/LINC-cal_solutions.h5'.format(best_sols[0],os.path.dirname(best_sols[0])))
+        for sol in solutions:
+            os.system('rm -r {:s}/{:s}*'.format(os.path.dirname(best_sols[0]),os.path.basename(sol).split('_')[0]))
+        tasklist.append('target_VLBI')
         tasklist.append('delay-calibration')
         tasklist.append('delay')
         tasklist.append('split-directions')
         tasklist.append('selfcal')
     else:
-        print('valid LINC solutions not found. Checking lb_calibrators.')
-        ## linc is not good
-        result = download_field_calibrators(obsid,caldir)
-        solutions = unpack_calibrator_sols(caldir,result)
-        if len(solutions) >= 1:
-            print('One or more calibrator found, comparing solutions ...')
-            best_sols = compare_solutions(solutions)
-            print('Best solutions are {:s}, cleaning up others.'.format(best_sols[0]))
-            os.system('cp {:s} {:s}/LINC-cal_solutions.h5'.format(best_sols[0],os.path.dirname(best_sols[0])))
-            for sol in solutions:
-                os.system('rm -r {:s}/{:s}*'.format(os.path.dirname(best_sols[0]),os.path.basename(sol).split('_')[0]))
-            tasklist.append('target_VLBI')
-            tasklist.append('delay-calibration')
-            tasklist.append('delay')
-            tasklist.append('split-directions')
-            tasklist.append('selfcal')
-        else:
-            ## need to re-run calibrator .... shouldn't ever be in this situation but here fore completeness
-            success = False
-            tasklist.append('calibrator')
-            tasklist.append('target_VLBI')
-            tasklist.append('delay-calibration')
-            tasklist.append('delay')
-            tasklist.append('split-directions')
-            tasklist.append('selfcal')
+        ## need to re-run calibrator .... shouldn't ever be in this situation but here fore completeness
+        success = False
+        tasklist.append('calibrator')
+        tasklist.append('target_VLBI')
+        tasklist.append('delay-calibration')
+        tasklist.append('delay')
+        tasklist.append('split-directions')
+        tasklist.append('selfcal')
     if success:
         ## set the task list in the lb_operations table
         set_task_list(obsid,tasklist)
         ## set the status back to staging if no runtime errors
         update_status( name, 'Staging' )
+
+def run_task( fieldobsid, task ):
+
+    field = fieldobsid.split('/')[0]
+    rundir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid,'rundir')
+    outdir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid)
+    os.makedirs(rundir)
+
+    fielddir = os.path.join(os.getenv('DATA_DIR'),fieldobsid)
+
+    flocs_common_options = "--record-toil-stats --scheduler slurm --slurm-queue {:s} --slurm-account {:s} --runner toil --rundir {:s} --outdir {:s} ".format(os.getenv('SLURM_QUEUES'),os.getenv('SLURM_ACCOUNT'), rundir,outdir)
+
+
+    if task == 'calibrator':
+        calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
+        calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s} {:s}'.format(calibrator_directory)
+        command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
+    elif task == 'target_VLBI':
+        ## flocs-run linc target
+        cal_solutions = os.path.join( fielddir, 'LINC-cal_solutions.h5' )
+        ## get skymodel -- update to get LoTSS skymodel
+        target_skymodel = os.path.join( fielddir, 'target.skymodel' )
+        mslist = glob.glob( os.path.join( fielddir, '*.MS' )
+        ss = "python3 {:s}/LINC/scripts/download_skymodel_target.py --Radius 5. --Source LOTSS --DoDownload True --targetname={:s} --fluxlimit 0.02 {:s} {:s}".format( softwaredir, field, mslist[0], target_skymodel )
+        run_apptainer( ss )
+        target_options = "--slurm-time 48:00:00 --output-fullres-data --min-unflagged-fraction 0.05 --offline-workers --target_skymodel {:s} --cal-solutions {:s} {:s}".format(cal_solutions,fielddir)
+        commmand = 'flocs-run linc target '+flocs_common_options+target_options
+    elif task == 'delay-calibration':
+        datadir = os.path.join( fielddir, 'HBA_target_VLBI', 'results' )
+        delaycal_options = "--slurm-time 48:00:00 --delay-calibrator {:s} --ms-suffix dp3concat {:s}".format(delay_catalogue,datadir)
+        command = 'flocs-run vlbi delay-calibration '+flocs_common_options+delaycal_options
+    elif task == 'delay':
+        update_status('DelayCheck')
+    elif task == 'split-directions':
+        ## NEED TO SORT OUT SELFCAL
+        datadir = os.path.join( fielddir, 'HBA_target_VLBI', 'results' )
+        delaycal_solutions = glob.glob( os.path.join( fielddir, delay-calibration, '*verified.h5' )[0]
+        nchunks = chunk_imagecat( fieldobsid )
+        commands = []
+        for i in range(nchunks):
+            image_catalogue = os.path.join(os.getenv('DATA_DIR'),field,'image_catalogue_{:s}.csv'.format(str(i+1)))
+            split_options = "--slurm-time 48:00:00 --delay-solset {:s} --source-catalogue {:s} --no-do-selfcal --ms-suffix dp3concat {:s}".format(delaycal_solutions,image_catalogue,datadir)
+            command = 'flocs-run vlbi split-directions '+flocs_common_options+split_options
+            commands.append(command)
+            ## sort out how to do multiprocessing
+    elif task == 'selfcal':
+        datadir = os.path.join( os.getenv('DATA_DIR'), fieldobsid, 'split-directions' )
+        msfiles = glob.glob( datadir, 'ILTJ*' ) )
+        with open( os.path.join( os.path.dirname(msfiles[0]), 'targetlist.txt' ), 'w' ) as f:
+            for msfile in msfiles:
+                f.write('{:s}\n'.format(msfile) )
+            with open('selfcal_{:s}.sh'.format(field),'w') as f:
+                f.write('#!/bin/bash -l\n\n')
+                f.write('#SBATCH --ntasks=1\n')
+                f.write('#SBATCH --cpus-per-task=32\n')
+                f.write('#SBATCH --job-name=selfcal\n')
+                f.write('#SBATCH -t 6:00:00\n\n')
+                f.write('DATADIR={:s}\n'.format(datadir))
+                f.write('OUTDIR={:s}/selfcal_\${SLURM_ARRAY_TASK_ID}\n'.format(outdir))
+                f.write('TARGETINMS=`sed -n "${SLURM_ARRAY_TASK_ID}p" ${DATADIR}/targetlist.txt`\n')
+                f.write('mkdir -p ${OUTDIR}\n')
+                f.write('mv ${TARGETINMS ${OUTDIR}\n')
+                f.write('cd ${OUTDIR}\n')
+                f.write('TARGETMS=`ls -d ILTJ*`\n')
+                f.write("apptainer exec -B {:s},{:s} --no-home {:s} facetselfcal --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=32 > facet_selfcal.log 2>&1") 
+            os.system('sbatch {:s} --array=1-{:s}%10 selfcal_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),str(len(msfiles))) )
+
+
+    os.system(command)
+
+    
+        ## an example of the outdir, which here is J090630+693030
+        #(pyenv) [lofarvlbi-fsweijen@ui-01 J090630+693030]$ ls LINC_calibrator_L749280_2025_10_31-08_34_26/
+        #jobstore  logs_LINC_calibrator.tar  results_LINC_calibrator
 
 
 def collect_solutions( caldir ):
@@ -418,7 +488,7 @@ def do_unpack(field):
                 f.write('#SBATCH -t 4:00:00\n\n')
                 f.write('OUTDIR={:s}\n'.format(os.path.dirname(trf)))
                 f.write('cd ${OUTDIR}\n')
-                f.write("apptainer exec -B {:s},{:s} {:s} python3 {:s}/lotss-hba-survey/unpack_and_dysco_compress.py {:s}".format(os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR'),os.getenv('LOFAR_SINGULARITY'),os.getenv('SOFTWAREDIR'),trf))
+                f.write("apptainer exec -B {:s},{:s} --no-home {:s} python3 {:s}/lotss-hba-survey/unpack_and_dysco_compress.py {:s}".format(os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR'),os.getenv('LOFAR_SINGULARITY'),os.getenv('SOFTWAREDIR'),trf))
             os.system('sbatch {:s} -W unpack_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),field) )
     ## check that everything unpacked
     success = 0    
@@ -481,8 +551,9 @@ def chunk_imagecat( fieldobsid, numdirs=10, catname='image_catalogue.csv', nchun
             for myline in mylines:
                 f.write(myline)
         chunk = chunk + 1
-    cmd = 'sbatch -J split {:s} --array=1-{:s}%{:s} {:s}/lotss-hba-survey/slurm/run_split-directions.sh {:s}'.format(os.getenv('CLUSTER_OPTS'),str(nchunks),str(nchunkspertime),os.getenv('SOFTWAREDIR'),fieldobsid)
-    return( cmd )
+    
+    #cmd = 'sbatch -J split {:s} --array=1-{:s}%{:s} {:s}/lotss-hba-survey/slurm/run_split-directions.sh {:s}'.format(os.getenv('CLUSTER_OPTS'),str(nchunks),str(nchunkspertime),os.getenv('SOFTWAREDIR'),fieldobsid)
+    return( nchunks )
 
 
 
@@ -517,12 +588,14 @@ def check_field(field):
     fieldobsid = '{:s}/{:s}'.format(field,obsid)
     procdir = os.path.join(str(os.getenv('DATA_DIR')),'processing')
     outdirs = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid)))
-    finished = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid),'finished.txt') )
+    ## frits will change flocs-run to put log in output directory
+    finished = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid),'log*.txt') )
     success = []
     if len(outdirs) == len(finished) and len(finished) > 0:
         for outdir in outdirs:
             with open(os.path.join(outdir,'finished.txt'),'r') as f:
                 lines = f.readlines()
+            ## need to update based on flocs output
             if 'SUCCESS: Pipeline finished successfully' in lines[0]:
                 success.append(1)
             else:
@@ -536,6 +609,7 @@ def check_field(field):
             print('The following pipelines did not finish successfully, please check processing:')
             print( np.asarray(outdirs)[idx] )    
             success = 'Failed'
+            ## will also need to update this
             workflow, obsid = get_workflow_obsid(outdirs[0])
     else:
         ## the number of finished != number of directories - the process is still running
