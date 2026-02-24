@@ -1,13 +1,14 @@
 import os, glob
 import numpy as np
 import bdsf
+import argparse
 from astropy.table import Table, vstack, join
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-import argparse
+from scipy import stats
 
 import aplpy
 import matplotlib.pyplot as plt
@@ -67,7 +68,7 @@ def mask_outliers(array):
         temp_array = array[mask]
         med = np.median(temp_array)
         std = np.std(temp_array)
-        mask = np.array(array < med+2.5*std) & np.array(array > med-2.5*std)
+        mask = np.array(array < med+3*std) & np.array(array > med-3*std)
     return mask
         
 def wcs_2d_from_header(header):
@@ -97,18 +98,11 @@ def identify_contour(x, y, segs, lotss_idx, grab_nearest=False):
         return starting_level, min_idx
     return None, None
 
-def fix_imhead(fitsfile, verbose=False):
+def fix_imhead(fitsfile):
     data, header = fits.getdata(fitsfile, header=True)
     if header['CRVAL1'] < 0:
-        if verbose:
-            print('RA is negative, updating header.')
         header['CRVAL1'] = header['CRVAL1'] + 360.
-        fits.writeto( fitsfile, data, header, overwrite=True )
-        if verbose:
-            print('done.')
-    else:
-        if verbose:
-            print('RA is already positive, exiting.')
+        fits.writeto(fitsfile, data, header, overwrite=True)
             
 def reorder_cat(srcs, comps):
     src_map = {}
@@ -356,7 +350,6 @@ def get_source_info(source_file, source_name, lotss_info):
     return source_table, component_table 
 
 def plot_source(source, image, outdir, lotss_dir, component_info, imcat, lotss_idx, flagged=False):
-    print(f"Source: {source}")
     font_scale=16
     fits_output_png = os.path.join(outdir, f"{source}.png")
 
@@ -466,9 +459,6 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
         inspection_file = os.path.join(os.getenv('DATA_DIR'),pointing,'inspection',inspection_file)
         inspection_cat = Table.read(inspection_file,format='csv')
 
-    # ## the output catalogue
-    # outcat = os.path.join(os.getenv('DATA_DIR'),pointing,catfile)
-        
     ## First work in the postprocessing directory
     os.chdir(postprocessingdir)
 
@@ -479,21 +469,10 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
         tmp_sources = glob.glob(os.path.join(selfcaldir,'ILTJ*'))
         sources = sources + tmp_sources
 
-    # ## If catalogue already exists then open it
-    # if os.path.exists(outcat) and not update:
-    #     ## danger!
-    #     print('catalogue already exists and update is not specified, stopping.')
-    #     # return
-    # elif os.path.exists(outcat) and update:
-    #     print('catalogue exists and will be updated.')
-    #     pointing_cat = Table.read(outcat,format='fits')
-    # else:
-        # print('catalogue does not exist, creating.')
     pointing_cat = Table()
     gaussian_cat = Table()
     seren_src_cat = Table()
     seren_gauss_cat = Table()
-    
     
     #Prepare lists
     ra_diff = []
@@ -538,29 +517,10 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
             component_info.write(comp_bdsf,format='csv',overwrite=True)
         
         #If source is flagged, don't use it for astrometry or flux scale
-        if inspection_info['flagged'][0] == "True":
+        if inspection_info['flagged'][0] != "False":
             continue
-            
-        #Compare to GAIA quasars for astrometry
-        gaia = gaia_quasar_match(source_info['RA'][0], source_info['DEC'][0], max_off)
-        if gaia is not None:
-            # print(f"{source} has a GAIA quasar match")
-
-            # Identify the component with the highest peak brightess to match against GAIA
-            max_peak_flux_idx = np.argmax(component_info['Peak_flux'])
-            peak_component = component_info[max_peak_flux_idx]
-            
-            if peak_component['Peak_flux']/peak_component['rms'] > min_rms_level:
-                # print(f"{source} also meets the thresholds")
-                # Calculate separation between GAIA quasar and peak component and append to lists
-                ra_sep = (((peak_component['RA']-gaia['RA_ICRS'][0]) * u.deg).to(u.arcsec).value)*np.cos(np.deg2rad(gaia['DE_ICRS'][0]))
-                dec_sep = ((peak_component['DEC']-gaia['DE_ICRS'][0]) * u.deg).to(u.arcsec).value
-                snr_sep = peak_component['Peak_flux']/peak_component['rms']
-                ra_diff.append(ra_sep)
-                dec_diff.append(dec_sep)
-                snr_diff.append(snr_sep)
         
-        #Flux density scale
+        #Check if compact
         if len(component_info) == 2:
             #A substantial amount of compact sources get identified as two components in LoTSS-HR. Can probably include these as "compact"
             ra_sep = (((component_info['RA'][0] - component_info['RA'][1]) * u.deg).to(u.arcsec).value)*np.cos(np.deg2rad(component_info['DEC'][0]))
@@ -582,44 +542,24 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
                     match = lotss_match[idx]
                     lotss_peak_ratio = float(match['Speak'][0])/float(match['SpeakTot'][0])
                     if lotss_peak_ratio > 0.7 or match['SCode'][0] == 'S':
-                        # print(f"{source} is compact (enough) in both LoTSS and LoTSS-HR!")
+                        #Obtain flux ratio measurement
                         lotss_flux.append(float(match['SpeakTot'][0])/1e3)
                         lotss_flux_e.append(float(match['e_SpeakTot'][0])/1e3)
                         lotss_hr = np.sum(component_info['Total_flux'].astype(float))
                         lotss_hr_e = np.sqrt(np.sum(component_info['E_Total_flux'].astype(float))**2)
                         lotsshr_flux.append(lotss_hr)
                         lotsshr_flux_e.append(lotss_hr_e)
+                        
+                        #Obtain astrometry measurement
+                        lotss_hr_ra = np.average(component_info['RA'], weights=component_info['Total_flux'])
+                        lotss_hr_dec = np.average(component_info['DEC'], weights=component_info['Total_flux'])
+                        ra_sep = (((lotss_hr_ra-match['RAJ2000'][0]) * u.deg).to(u.arcsec).value)*np.cos(np.deg2rad(match['DEJ2000'][0]))
+                        dec_sep = ((lotss_hr_dec-match['DEJ2000'][0]) * u.deg).to(u.arcsec).value
+                        snr_sep = lotss_hr/lotss_hr_e
+                        ra_diff.append(ra_sep)
+                        dec_diff.append(dec_sep)
+                        snr_diff.append(snr_sep)
         
-#         #Manual inspection bit
-#         if "ILTJ124758.15" in source:
-#             lotss_match = match_lotss(source_info['RA'][0], source_info['DEC'][0], max_off)
-#             idx = np.where(lotss_match['Source'] == source)[0]
-#             match = lotss_match[idx]
-#             print(f"Component info for {source}:\n{match}\n{component_info}")
-#             lotss = float(match['SpeakTot'])/1e3
-#             lotss_peak_ratio = float(match['Speak'][0])/1e3/lotss
-#             lotss_hr = np.sum(component_info['Total_flux'].astype(float))
-#             print(f"LoTSS-HR flux density: {lotss_hr}")
-#             print(f"LoTSS flux density: {lotss}")
-#             print(f"LoTSS/LoTSS-HR flux ratio: {lotss/lotss_hr}")
-#             print(f"LoTSS peak ratio: {lotss_peak_ratio}")
-#             
-#             if len(component_info) == 2:
-#                 ra_sep = 3600*(component_info['RA'][0] - component_info['RA'][1])*np.cos(np.deg2rad(component_info['DEC'][0]))
-#                 dec_sep = 3600*(component_info['DEC'][0] - component_info['DEC'][1])
-#                 total_sep = np.sqrt(ra_sep**2 + dec_sep**2)
-#                 if total_sep < 1: # and component_info['S_Code'][0] == 'M' and component_info['S_Code'][1] == 'M':
-#                     # print(f"{source} consists of two nearby compact components in LoTSS-HR")
-#                     two_nearby = True
-#                 else:
-#                     two_nearby = False
-#             else:
-#                 two_nearby = False
-#             print(f"Two nearby: {two_nearby}")
-#             compact_enough = (len(component_info) == 1 and component_info['S_Code'][0] == 'S') or two_nearby
-#             print(f"Compact enough: {compact_enough}")
-        continue
-
     #Move to final output folder
     os.chdir(outputdir)
     
@@ -636,16 +576,8 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
         ra_offset = np.average(ra_diff[mask], weights=snr_diff[mask])
         dec_offset = np.average(dec_diff[mask], weights=snr_diff[mask])
         
-        astro_err = np.sqrt(np.average((ra_diff[mask]-ra_offset)**2+(dec_diff[mask]-dec_offset)**2, weights=snr_diff[mask]))
-        
-        if astro_err > 1:
-            net_offset = np.sqrt(ra_diff**2 + dec_diff**2)
-            nearest_quasar = np.argmin(net_offset)
-            ra_offset = ra_diff[nearest_quasar]
-            dec_offset = dec_diff[nearest_quasar]
-            astro_err = 0.0
-            mask = np.zeros(len(ra_diff), dtype=bool)
-            mask[nearest_quasar] = True
+        total_offset = np.sqrt((ra_diff[mask]-ra_offset)**2+(dec_diff[mask]-dec_offset)**2)
+        _, astro_err = stats.rayleigh.fit(total_offset)
         
         print(f"RA offset: {ra_offset:.5f} arcseconds")
         print(f"Dec offset: {dec_offset:.5f} arcseconds")
@@ -653,8 +585,8 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
 
         fig = plt.figure(figsize=(8,7))
         ax = plt.gca()
-        plt.scatter(ra_diff[mask], dec_diff[mask], c='royalblue', alpha=0.6, s=2e2/np.sqrt(snr_diff[mask]))
-        plt.scatter(ra_diff[~mask], dec_diff[~mask], c='r', alpha=0.75, s=2e2/np.sqrt(snr_diff[~mask]))
+        plt.scatter(ra_diff[mask], dec_diff[mask], c='royalblue', alpha=0.6, s=2e2/np.sqrt(snr_diff[mask]),zorder=10)
+        plt.scatter(ra_diff[~mask], dec_diff[~mask], c='r', alpha=0.75, s=2e2/np.sqrt(snr_diff[~mask]),zorder=8)
         plt.axvline(ra_offset, c='royalblue', linestyle='dashed', alpha=0.5, linewidth=1)
         plt.axhline(dec_offset, c='royalblue', linestyle='dashed', alpha=0.5, linewidth=1)
         plt.axvline(0, c='k', linestyle='dotted', linewidth=0.5)
@@ -703,9 +635,9 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
         plt.close(fig)
         
     #Test values, do not use for real catalogues
-    ra_offset = 0.000
-    dec_offset = 0.000
-    flux_correction = 1.000
+    # ra_offset = 0.000
+    # dec_offset = 0.000
+    # flux_correction = 1.000
     
     #Output folder for corrected fits images
     corrected_fitsfolder = os.path.join(outputdir, 'fits')
@@ -720,11 +652,7 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
         
     #Iterate over the sources for astrometry and flux scale
     for source_file in sources:
-        ## get lotss info on source
         source = os.path.basename(source_file)
-        # if source not in ["ILTJ133738.88+312508.3"]: #ILTJ123952.53+374016.2
-        #     continue
-        # print(f"Processing source: {source}")
         
         lotss_idx = np.where(imcat['Source_id'] == source)[0]
         lotss_info = imcat[lotss_idx]
@@ -737,7 +665,7 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
         source_info = Table.read(source_bdsf,format='csv')
         component_info = Table.read(comp_bdsf,format='csv')
         
-        flagged = inspection_info['flagged'][0] == "True"
+        flagged = inspection_info['flagged'][0] != "False"
         
         #Apply corrections to fits file
         corrected_fitsfile = os.path.join(corrected_fitsfolder, f"{source}_LoTSS-HR.fits")
@@ -862,7 +790,6 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
     seren_gauss_cat.write(seren_gauss_catfile, format=cat_format, overwrite=update)
 
 
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -875,6 +802,3 @@ if __name__ == "__main__":
     parser.add_argument( '--update', action='store_true', default=True )
     args = parser.parse_args()
     main( args.pointing, outdir=args.outdir, processingdir=args.postprocessdir, inspection_file=args.inspection, cat_format=args.catalogue_format, update=args.update)
-
-    
-
