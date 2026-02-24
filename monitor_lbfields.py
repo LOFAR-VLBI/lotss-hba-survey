@@ -7,7 +7,7 @@ import datetime
 from surveys_db import SurveysDB, tag_field, get_cluster
 
 import os
-import threading
+#import threading
 import glob
 import requests
 import stager_access
@@ -21,6 +21,9 @@ from calibrator_utils import *
 from plot_field import *
 import numpy as np
 from lbfields_utils import *
+
+## threading
+from concurrent.futures import ProcessPoolExecutor
 
 
 #################################
@@ -43,17 +46,9 @@ if basedir is None:
 if not os.getenv('LOFAR_SINGULARITY'):
     raise RuntimeError('LOFAR_SINGULARITY must point to a singularity image')
 
-solutions_thread=None
-solutions_name=None
-download_thread=None
-download_name=None
-stage_thread=None
-stage_name=None
-unpack_thread=None
-unpack_name=None
-verify_thread=None
-verify_name=None
-totallimit=20
+## start a pool for number of processes, using a total limit of 20 
+executor = ProcessPoolExecutor(max_workers=20)
+
 staginglimit=0 #2
 maxstaged=6
 
