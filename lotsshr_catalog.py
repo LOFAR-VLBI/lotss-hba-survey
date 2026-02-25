@@ -73,7 +73,8 @@ def mask_outliers(array):
         
 def wcs_2d_from_header(header):
     wcs = WCS(header)
-    wcs = wcs.dropaxis(2).dropaxis(2)
+    if header['NAXIS'] == 4:
+        wcs = wcs.dropaxis(2).dropaxis(2)
     return wcs
 
 def identify_contour(x, y, segs, lotss_idx, grab_nearest=False):
