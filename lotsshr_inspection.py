@@ -130,17 +130,12 @@ def main(pointing):
     for selfcaldir in selfcaldirs:
         tmp_sources = glob.glob(os.path.join(selfcaldir,'ILTJ*'))
         sources = sources + tmp_sources
-
     
     inspection_cat = Table()
 
     for source_file in sources:
         ## get lotss info on source
         source = os.path.basename(source_file)
-        idx = np.where(imcat['Source_id'] == source)[0]
-        lotss_info = imcat[idx]
-        majax = lotss_info['Majax']*u.arcsec
-        radius = lotss_info['Radius'][0]
 
         runs = ['']
         alternate_dir = 'first_selfcal'
@@ -175,9 +170,6 @@ def main(pointing):
             drs = np.array(drs)
             ndrs = np.array(ndrs)
             rmss = np.array(rmss)
-            # print(f"Dynamic range: {drs}")
-            # print(f"Negative dynamic range: {ndrs}")
-            # print(f"rms: {rmss}")
         except ValueError:
             regular = False
 
@@ -212,6 +204,24 @@ def main(pointing):
             dr=drs[iter_idx]
             ndr=ndrs[iter_idx]
             rms=rmss[iter_idx]
+        elif len(runs) > 1:
+            if len(drs[0]) == 0:
+                good_idx = 1
+            else:
+                good_idx = 0
+            drs = drs[good_idx]
+            ndrs = ndrs[good_idx]
+            rmss = rmss[good_idx]
+            
+            check_iter = drs / np.max(drs) + np.min(rmss) / rmss + np.min(ndrs) / ndrs
+            iter_idx = np.unravel_index(np.argmax(check_iter, axis=None), check_iter.shape)
+            
+            best_run = runs[good_idx]
+            iteration = f'{iter_idx[0]:03}'
+            
+            dr=drs[iter_idx[0]]
+            ndr=ndrs[iter_idx[0]]
+            rms=rmss[iter_idx[0]]
         else:
             best_run = runs[0]
             iteration = '000'
