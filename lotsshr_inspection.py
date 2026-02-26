@@ -229,7 +229,7 @@ def main(pointing):
             ndr=ndrs[0][0]
             rms=rmss[0][0]
         
-        if pb:
+        if os.path.exists(os.path.join(source_file, best_run, 'image_000-MFS-image-pb.fits')):
             print(f"Best image for {source_file}: {best_run}/image_{iteration}-MFS-image-pb.fits")
             best_image = os.path.join(source_file, best_run, f"image_{iteration}-MFS-image-pb.fits")
         else:
