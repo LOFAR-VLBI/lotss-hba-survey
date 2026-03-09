@@ -46,7 +46,7 @@ def update_status(name,status,stage_id=None,time=None,workdir=None,av=None,surve
 def run_apptainer( command ):
     singularity = os.getenv('LOFAR_SNGULARITY')
     bindpaths = ','.join([os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR')])
-    os.system( 'apptainer exec -B {:s} --no-home {:s} {:s}'.format( bindpaths, singularity, command )
+    os.system( 'apptainer exec -B {:s} --no-home {:s} {:s}'.format( bindpaths, singularity, command ) )
 
 def restart_toil_job( field, obsid, workflow ):
     softwaredir = os.getenv('SOFTWAREDIR')
