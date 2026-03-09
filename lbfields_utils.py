@@ -501,7 +501,7 @@ def get_linc_inputs( field, obsid ):
     #Download IONEX
     ionexpath = datadir
     cal_solutions = os.path.join( datadir, 'LINC-cal_solutions.h5' )
-    cmd = "apptainer exec -B {:s},{:s} --no-home {:s} python3 {:s}/LINC/scripts/createRMh5parm.py --ionexpath={:s} --solsetName=target --server='http://ftp.aiub.unibe.ch/CODE/' {:s} {:s}".format( os.getcwd(), softwaredir, singularity_img, softwaredir, datadir, mslist[0], cal_solutions )
+    cmd = "apptainer exec -B {:s},{:s} --no-home {:s} spinifex get_rm_h5parm_from_ms {:s} -o {:s} --solset-name target --soltab-name spinifex".format( os.getcwd(), softwaredir, singularity_img, mslist[0 ], cal_solutions)
     cc = os.system(cmd)
     if cc == 256:
         os.system(cmd.replace('http://ftp.aiub.unibe.ch/CODE/','http://chapman.upc.es/'))
