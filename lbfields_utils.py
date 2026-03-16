@@ -166,7 +166,7 @@ def run_task( fieldobsid, task ):
         cal_solutions = os.path.join( fielddir, 'LINC-cal_solutions.h5' )
         ## get skymodel -- update to get LoTSS skymodel
         target_skymodel = os.path.join( fielddir, 'target.skymodel' )
-        mslist = glob.glob( os.path.join( fielddir, '*.MS' )
+        mslist = glob.glob( os.path.join( fielddir, '*.MS' ) )
         ss = "python3 {:s}/LINC/scripts/download_skymodel_target.py --Radius 5. --Source LOTSS --DoDownload True --targetname={:s} --fluxlimit 0.02 {:s} {:s}".format( softwaredir, field, mslist[0], target_skymodel )
         run_apptainer( ss )
         target_options = "--slurm-time 48:00:00 --output-fullres-data --min-unflagged-fraction 0.05 --offline-workers --target_skymodel {:s} --cal-solutions {:s} {:s}".format(cal_solutions,fielddir)
@@ -180,7 +180,7 @@ def run_task( fieldobsid, task ):
     elif task == 'split-directions':
         ## NEED TO SORT OUT SELFCAL
         datadir = os.path.join( fielddir, 'HBA_target_VLBI', 'results' )
-        delaycal_solutions = glob.glob( os.path.join( fielddir, delay-calibration, '*verified.h5' )[0]
+        delaycal_solutions = glob.glob( os.path.join( fielddir, delay-calibration, '*verified.h5' ) )[0]
         nchunks = chunk_imagecat( fieldobsid )
         commands = []
         for i in range(nchunks):
@@ -191,7 +191,7 @@ def run_task( fieldobsid, task ):
             ## sort out how to do multiprocessing
     elif task == 'selfcal':
         datadir = os.path.join( os.getenv('DATA_DIR'), fieldobsid, 'split-directions' )
-        msfiles = glob.glob( datadir, 'ILTJ*' ) )
+        msfiles = glob.glob( os.path.join( datadir, 'ILTJ*' ) )
         with open( os.path.join( os.path.dirname(msfiles[0]), 'targetlist.txt' ), 'w' ) as f:
             for msfile in msfiles:
                 f.write('{:s}\n'.format(msfile) )
