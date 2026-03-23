@@ -17,6 +17,11 @@ export DDF_PIPELINE_INSTALL=/cosma/home/durham/dc-mora2/Software/ddf-pipeline
 
 ## PYTHONPATH
 export SOFTWAREDIR=/home/azimuth/software
-export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-query:${SOFTWAREDIR}/lofar_stager_api:${SOFTWAREDIR}/lofar_lta-2.8.0:${SOFTWAREDIR}/ddf-pipeline/utils:${SOFTWAREDIR}/lotss-hba-survey:${SOFTWAREDIR}/ddf-pipeline/scripts:
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-query
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_stager_api
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_lta-2.8.0
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/utils
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-hba-survey
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/scripts
 
 need to add whatever plot-field is in nowadays ${SOFTWAREDIR}/
