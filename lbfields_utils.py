@@ -21,7 +21,6 @@ from tasklist import *
 from calibrator_utils import *
 from plot_field import *
 import numpy as np
-from flocs_lta import flocs_search_lta
 
 
 def update_status(name,status,stage_id=None,time=None,workdir=None,av=None,survey=None):
@@ -101,6 +100,7 @@ def get_local_obsid( name ):
 ## finding and checking solutions 
 
 def collect_solutions_lhr( caldir ):
+    caldir = caldir.rstrip('/')
     survey=None
     obsid = os.path.basename(caldir)
     namedir = os.path.dirname(caldir)
@@ -202,7 +202,7 @@ def run_task( fieldobsid, task ):
                 f.write('#SBATCH --job-name=selfcal\n')
                 f.write('#SBATCH -t 6:00:00\n\n')
                 f.write('DATADIR={:s}\n'.format(datadir))
-                f.write('OUTDIR={:s}/selfcal_\${SLURM_ARRAY_TASK_ID}\n'.format(outdir))
+                f.write('OUTDIR={:s}/selfcal_${SLURM_ARRAY_TASK_ID}\n'.format(outdir))
                 f.write('TARGETINMS=`sed -n "${SLURM_ARRAY_TASK_ID}p" ${DATADIR}/targetlist.txt`\n')
                 f.write('mkdir -p ${OUTDIR}\n')
                 f.write('mv ${TARGETINMS ${OUTDIR}\n')
@@ -315,14 +315,17 @@ def stage_field( name, survey=None ):
     caldirs = []
     csrmfiles = []
     for obsid in obsids:
-        caldir = os.path.join(fielddir, obsid)
-        srmfile = 'srms_{:s}.txt'.format(obsid)
+        caldir = os.path.join(fielddir, str(obsid))
+        srmfile = 'srms_{:s}.txt'.format(str(obsid))
         csrmfile = os.path.join(caldir,srmfile)
         csrmfiles.append(csrmfile)
+        caldirs.append(caldir)
         if not os.path.exists(caldir):
             os.makedirs(caldir)
-            flocs_search_lta.main( sasid=obsid, freq_end=168., stage=False )
-            os.system('mv {:s} {:s}/{:s}'.format(srmfile, csrmfile))
+            ss = 'flocs-lta-search --sasid {:s} --freq_end=168. --get-surls'.format(str(obsid))
+            os.system( ss )
+            os.system('mv {:s} {:s}'.format(srmfile, csrmfile))
+            os.system('rm 20*log')
         else:
             if os.path.exists(csrmfile):
                 with open(csrmfile,'r') as f:
@@ -331,7 +334,7 @@ def stage_field( name, survey=None ):
                 tarfiles = glob.glob(os.path.join(caldir,'*.tar'))
                 trfs = [ val.split('/')[-1] for val in tarfiles ]
                 ## remove the already downloaded files from uris_to_stage ...
-                idxs = [ i for i,val in enumerate(uris_to_stage) if val.split('/')[-1] in trfs ]
+                idxs = [ i for i,val in enumerate(uris) if val.split('/')[-1] in trfs ]
                 for idx in idxs:
                     uris.pop(idx)
                 with open(csrmfile,'w') as f:
@@ -339,8 +342,7 @@ def stage_field( name, survey=None ):
                         f.write(uri)
                         f.write('\n')
             else:
-                flocs_search_lta.main( sasid=obsid, freq_end=168., stage=False )
-                os.system('mv {:s} {:s}/{:s}'.format(srmfile, csrmfile ))
+                print('Something bad happened for {:s}'.format(str(obsid)))
     ## now collect everything that needs to be staged
     uris = []
     for csrmfile in csrmfiles:
