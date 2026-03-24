@@ -180,9 +180,15 @@ while True:
         ## and download the catalogue
         with SurveysDB(survey=None) as sdb:
             idd=sdb.db_get('lb_fields',stage_name)
-        generate_catalogues( float(idd['ra']), float(idd['decl']), targRA = float(idd['ra']), targDEC = float(idd['decl']),
-             im_radius=1.24, bright_limit_Jy=5., lotss_result_file='image_catalogue.csv', delay_cals_file='delay_calibrators.csv', 
-             match_tolerance=5., image_limit_Jy=0.01, vlass=True, html=False, outdir=os.path.dirname(solutions_names[0]) )
+        #cmd = 'lofar-vlbi-plot'
+        cmd = 'python3 /cosma8/data/do011/dc-mora2/Software/plot_field/src/plot_field/plot_field.py'
+
+        ss = cmd + " --RA {:f} --DEC {:f} --targRA {:f} --targDEC {:f} --im_radius 1.24 --bright_limit_Jy 5. --lotss_result_file image_catalogue.csv --delay_cals_file delay_calibrators.csv --match_tolerance 5. --image_limit_Jy 0.01 --vlass --html --output_dir {:s}".format(float(idd['ra']),float(idd['decl']),float(idd['ra']),float(idd['decl']),os.path.dirname(solutions_names[0]) )
+        os.system( ss )
+
+        #generate_catalogues( float(idd['ra']), float(idd['decl']), targRA = float(idd['ra']), targDEC = float(idd['decl']),
+        #     im_radius=1.24, bright_limit_Jy=5., lotss_result_file='image_catalogue.csv', delay_cals_file='delay_calibrators.csv', 
+        #     match_tolerance=5., image_limit_Jy=0.01, vlass=True, html=False, outdir=os.path.dirname(solutions_names[0]) )
 
     ## for things that are staging, check the status 
     if 'Staging' in d.keys():
