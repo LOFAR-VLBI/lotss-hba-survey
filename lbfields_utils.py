@@ -364,7 +364,7 @@ def make_macaroon_file( obsid, site, url, macdict ):
             bearer_token = mac[site]
         except:
             print('Token not found for {:s}'.format(site))
-    macname = obsid + '.conf'
+    macname = os.path.join( os.getenv('PWD'), obsid + '.conf' )
     with open( macname, 'w' ) as f:
         f.write( 'type = webdav\n' )
         f.write( 'vendor = other\n' )
