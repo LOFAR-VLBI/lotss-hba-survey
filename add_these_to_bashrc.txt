@@ -1,7 +1,12 @@
+## installation
+pip install lofar-vlbi-plot
+pip install git+https://github.com/FLOCSoft/flocs-lta.git
+pip install git+https://github.com/FLOCSoft/flocs-runners.git
+
 export DDF_PIPELINE_CLUSTER=azimuth
 export DATA_DIR=/home/azimuth/surveys/
 export SCRATCH_DIR=/home/azimuth/surveys/
-export LOFAR_SINGULARITY=/home/azimuth/software/singularity/lofar_sksp_v4.4.0_cascadelake_cascadelake_ddf_mkl_cuda.sif
+export LOFAR_SINGULARITY=/home/azimuth/software/singularity/pull/vlbi-cwl_latest.sif
 export SOFTWAREDIR=/cosma/home/durham/dc-mora2/Software
 
 ## cluster options
@@ -23,5 +28,3 @@ export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_lta-2.8.0
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/utils
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-hba-survey
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/scripts
-
-need to add whatever plot-field is in nowadays ${SOFTWAREDIR}/
