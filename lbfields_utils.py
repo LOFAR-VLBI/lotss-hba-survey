@@ -495,7 +495,7 @@ def do_unpack(field):
     ## check that everything unpacked
     success = 0    
     for obsdir in obsdirs:
-        failed = glob.glob(os.path.join(obsdir,'failed*txt'))[0]
+        failed = glob.glob(os.path.join(obsdir,'failed*txt'))
         if len(failed) == 0:
             success += 1
     if success == len(obsdirs):
