@@ -28,3 +28,10 @@ export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_lta-2.8.0
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/utils
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-hba-survey
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/scripts
+
+## flocs-runners
+export APPTAINER_CACHEDIR=${SOFTWAREDIR}/singularity/cache
+export APPTAINER_PULLDIR=${SOFTWAREDIR}/singularity/pull
+export CWL_SINGULARITY_CACHE=${APPTAINER_CACHEDIR}
+export LINC_DATA_ROOT=${SOFTWAREDIR}/LINC
+export VLBI_DATA_ROOT=${SOFTWAREDIR}/pilot
