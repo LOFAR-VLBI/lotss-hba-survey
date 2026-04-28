@@ -117,33 +117,67 @@ def collect_solutions_lhr( caldir ):
 
     ## get the calibrator solutions
     result = download_field_calibrators(obsid,caldir)
-    solutions = unpack_calibrator_sols(caldir,result)
-    if len(solutions) >= 1:
-        print('One or more calibrator found, comparing solutions ...')
-        best_sols = compare_solutions(solutions)
-        print('Best solutions are {:s}, cleaning up others.'.format(best_sols[0]))
-        os.system('cp {:s} {:s}/LINC-cal_solutions.h5'.format(best_sols[0],os.path.dirname(best_sols[0])))
-        for sol in solutions:
-            os.system('rm -r {:s}/{:s}*'.format(os.path.dirname(best_sols[0]),os.path.basename(sol).split('_')[0]))
-        tasklist.append('target_VLBI')
-        tasklist.append('delay-calibration')
-        tasklist.append('delay')
-        tasklist.append('split-directions')
-        tasklist.append('selfcal')
-    else:
+    if len(result[int(obsid)]) == 0:
         ## need to re-run calibrator .... shouldn't ever be in this situation but here fore completeness
-        success = False
         tasklist.append('calibrator')
         tasklist.append('target_VLBI')
         tasklist.append('delay-calibration')
         tasklist.append('delay')
         tasklist.append('split-directions')
         tasklist.append('selfcal')
+    else:
+        solutions = unpack_calibrator_sols(caldir,result)
+        if len(solutions) >= 1:
+            print('One or more calibrator found, comparing solutions ...')
+            best_sols = compare_solutions(solutions)
+            print('Best solutions are {:s}, cleaning up others.'.format(best_sols[0]))
+            os.system('cp {:s} {:s}/LINC-cal_solutions.h5'.format(best_sols[0],os.path.dirname(best_sols[0])))
+            for sol in solutions:
+                os.system('rm -r {:s}/{:s}*'.format(os.path.dirname(best_sols[0]),os.path.basename(sol).split('_')[0]))
+            tasklist.append('target_VLBI')
+            tasklist.append('delay-calibration')
+            tasklist.append('delay')
+            tasklist.append('split-directions')
+            tasklist.append('selfcal')
     if success:
         ## set the task list in the lb_operations table
         set_task_list(obsid,tasklist)
         ## set the status back to staging if no runtime errors
         update_status( name, 'Staging' )
+
+def get_calibrators( field ):
+    ## get obsids
+    obsids = get_obsids( field )
+    ## stage the data
+    for obsid in obsids:
+        ss = 'flocs-lta-search --sasid {:s} --freq_end=168. --get-surls --stage-products calibrator'.format(str(obsid))
+        os.system( ss )
+        os.system('rm 20*log')
+
+    all_uris = []
+    for obsid in obsids:
+        with open( 'srms_{:s}.txt'.format(obsid) ) as f:
+            lines = f.readlines()
+        uris = [ line.rstrip('\n') for line in lines ]
+        all_uris = all_uris + uris
+
+    ## submit as a single request to get the stage id
+
+    stage_status = stager_access.get_status(s)
+
+
+
+    ## download the data
+
+    ## run LINC calibrator
+    flocs_common_options = "--record-toil-stats --scheduler slurm --slurm-queue {:s} --slurm-account {:s} --runner toil --rundir {:s} --outdir {:s} ".format(os.getenv('SLURM_QUEUES'),os.getenv('SLURM_ACCOUNT'), rundir,outdir)
+    calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
+    calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s} {:s}'.format(calibrator_directory)
+    command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
+
+
+
+
 
 def run_task( fieldobsid, task ):
 
@@ -158,8 +192,12 @@ def run_task( fieldobsid, task ):
 
 
     if task == 'calibrator':
+        ## need to stage and download calibrators
+
+
+
         calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
-        calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s} {:s}'.format(calibrator_directory)
+        calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s}'.format(calibrator_directory)
         command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
     elif task == 'target_VLBI':
         ## flocs-run linc target
@@ -671,4 +709,94 @@ def do_verify(field):
         os.system( 'rm -r {:s}'.format(os.path.join(basedir,field)))
         ## delete the tarfile
         os.system( 'rm {:s}.tgz'.format(field))
+
+def archive_lbfield( field, operation='mv' ):
+    if operation == 'copy':
+        cmd = 'cp -r '
+    else:
+        cmd = 'mv '
+    ## make an output directory to put things in
+    fielddir = os.path.join( os.getenv('DATA_DIR'), field )
+    resultsdir = os.path.join( fielddir, 'archive' )
+    finaldir = os.path.join( fielddir, 'final' )
+    if not os.path.exists(resultsdir):
+        os.makedirs(resultsdir)
+        os.makedirs(finaldir)
+
+    ## catalogue files
+    catdir = os.path.join(fielddir, 'catalogue' )
+    catfiles = glob.glob( os.path.join( catdir, '*_catalogue.csv' ) )
+    catpngs = glob.glob( os.path.join( catdir, '*png' ) )
+    fits = glob.glob( os.path.join( catdir, 'fits' ) )
+    inspection = glob.glob( os.path.join( catdir, 'inspection' ) )
+    allfiles = catfiles + catpngs + fits + inspection 
+    for af in allfiles:
+        os.system( cmd + af + ' ' + finaldir + '/' )
+
+    obsids = get_local_obsid( field )
+    for obsid in obsids:
+        obsdir = os.path.join( fielddir, obsid )
+        results_obsdir = os.path.join( resultsdir, obsid )
+        os.makedirs( results_obsdir )
+        ## general solutions
+        lincsols = glob.glob( os.path.join( obsdir, 'LINC*h5' ) )
+        if os.path.exists( os.path.join( obsdir, 'delay-calibration' ) ):
+            deldir = 'delay-calibration'
+        else:
+            deldir = 'phaseup-concat'
+        tmp = glob.glob( os.path.join( obsdir, deldir, 'merged*verified.h5' ) )
+        tmp1 = glob.glob( os.path.join( obsdir, deldir, 'verified_solution_plots' ) )
+        tmp2 = glob.glob( os.path.join( obsdir, deldir, 'pipelinesols/ILTJ*dp3-concat' ) )
+        delcal = tmp + tmp1 + tmp2
+        allfiles = lincsols + delcal
+        for af in allfiles:
+            os.system( cmd + af + ' ' + results_obsdir + '/' )
+
+        ## selfcal solutions
+        sources1 = glob.glob( os.path.join( obsdir, 'selfcal', 'ILTJ*' ) )
+        sources2 = glob.glob( os.path.join( obsdir, 'selfcal', 'ILTJ*', 'first_selfcal' ) )
+        sources = sources1 + sources2
+        os.makedirs( os.path.join( results_obsdir, 'selfcal' ) )
+        for source in sources:
+            src = os.path.basename( source )
+            if src == 'first_selfcal':
+                src = os.path.join( os.path.basename( os.path.dirname( source ) ), 'first_selfcal')
+            src_outdir = os.path.join( results_obsdir, 'selfcal', src )
+            os.makedirs( src_outdir )
+            mslist = glob.glob( os.path.join( source, 'ILTJ*ms' ) )
+            h5parms = glob.glob( os.path.join( source, 'merged*h5' ) )
+            plots = glob.glob( os.path.join( source, 'plotlosoto*' ) )
+            mfs = glob.glob( os.path.join( source, '*MFS*fits' ) )
+            pngs = glob.glob( os.path.join( source, '*png' ) )
+            logs = glob.glob( os.path.join( source, '*log' ) )
+            srcfiles = mslist + h5parms + plots + mfs + pngs + logs
+            for sf in srcfiles:
+                os.system( cmd + sf + ' ' + src_outdir + '/' )
+    pwd = os.getenv('PWD')
+    os.chdir(os.getenv('DATA_DIR'))
+    os.system( 'tar cvzf {:s}_archive.tgz {:s}'.format(field, os.path.join(field,'archive')) )
+    os.system( 'tar cvzf {:s}_final.tgz {:s}'.format(field, os.path.join(field,'final')) )
+    os.chdir(pwd)
+
+    tarfiles = glob.glob(field+'*tgz')
+    macaroon_dir = os.getenv('MACAROON_DIR')
+    macaroon = glob.glob(os.path.join(macaroon_dir,'*lofarvlbi.conf'))[0]
+    rc = RClone( macaroon, debug=True )
+    rc.get_remote()
+    success = 0
+    for trf in tarfiles:
+        d = rc.execute_live(['-P', 'copy', trf]+[rc.remote + '/' + 'disk/fields/'])
+        if d['err'] or d['code']!=0:
+            success += 1
+            update_status(field,'rclone failed')
+            print('Rclone failed for field {:s}'.format(field))
+    if success == 4:
+        print('Tidying uploaded directory for',field)
+        update_status(field,'Complete')
+        ## delete the directory
+        os.system( 'rm -r {:s}'.format(os.path.join(procdir,field)))
+        ## delete the initial data
+        os.system( 'rm -r {:s}'.format(os.path.join(basedir,field)))
+        ## delete the tarfile
+        os.system( 'rm {:s}*.tgz'.format(field))
 
