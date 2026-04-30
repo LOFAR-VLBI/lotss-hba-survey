@@ -790,13 +790,14 @@ def archive_lbfield( field, operation='mv' ):
             success += 1
             update_status(field,'rclone failed')
             print('Rclone failed for field {:s}'.format(field))
-    if success == 4:
+    if success == 0:
         print('Tidying uploaded directory for',field)
         update_status(field,'Complete')
         ## delete the directory
         os.system( 'rm -r {:s}'.format(os.path.join(procdir,field)))
         ## delete the initial data
         os.system( 'rm -r {:s}'.format(os.path.join(basedir,field)))
+    if success == 4:
         ## delete the tarfile
         os.system( 'rm {:s}*.tgz'.format(field))
 
