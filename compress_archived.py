@@ -1,6 +1,3 @@
-from __future__ import print_function
-# Compress the QU cubes for all archived data
-
 import os
 import glob
 from surveys_db import SurveysDB
