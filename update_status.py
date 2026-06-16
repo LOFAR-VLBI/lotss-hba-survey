@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-from __future__ import print_function
 from time import sleep
 import datetime
 from surveys_db import SurveysDB, tag_field, get_cluster
