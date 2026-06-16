@@ -182,6 +182,7 @@ def get_calibrators( field ):
 def run_task( fieldobsid, task ):
 
     field = fieldobsid.split('/')[0]
+    ## update to use scratch dir if set and different than data_dir/processing - Roland
     rundir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid,'rundir')
     outdir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid)
     os.makedirs(rundir)
@@ -189,16 +190,18 @@ def run_task( fieldobsid, task ):
     fielddir = os.path.join(os.getenv('DATA_DIR'),fieldobsid)
 
     flocs_common_options = "--record-toil-stats --scheduler slurm --slurm-queue {:s} --slurm-account {:s} --runner toil --rundir {:s} --outdir {:s} ".format(os.getenv('SLURM_QUEUES'),os.getenv('SLURM_ACCOUNT'), rundir,outdir)
-
+    ## Frits to look at this and check that this is sensible (as well as stuff below)
 
     if task == 'calibrator':
         ## need to stage and download calibrators
 
-
+        ## use obsid and flocs-lta to stage and download calibrators - Frits
+        ## will need to also do two calibrators then can pick the best one (function already exists)
 
         calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
         calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s}'.format(calibrator_directory)
         command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
+        ## upload solutions to calibrator folder on spider - Leah
     elif task == 'target_VLBI':
         ## flocs-run linc target
         cal_solutions = os.path.join( fielddir, 'LINC-cal_solutions.h5' )
