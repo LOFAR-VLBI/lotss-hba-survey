@@ -194,14 +194,24 @@ def run_task( fieldobsid, task ):
 
     if task == 'calibrator':
         ## need to stage and download calibrators
+        calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
+        os.mkdirs( calibrator_directory )
 
         ## use obsid and flocs-lta to stage and download calibrators - Frits
-        ## will need to also do two calibrators then can pick the best one (function already exists)
+        ## run flocs-lta with outdir as calibrators_directory to put the calibrator data in, unpack and run dysco if necessary
 
-        calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
-        calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s}'.format(calibrator_directory)
-        command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
-        ## upload solutions to calibrator folder on spider - Leah
+        calibrator_dirs = glob.glob( calibrator_directory + '/*' )
+        cal_success = 0
+        for calibrator_dir in calibrator_dirs:
+            calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s}'.format(calibrator_directory)
+            command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
+            ## now tar the results
+            ## and upload to spider
+            ## and move the results locally
+            tarfiles = glob.glob( 'somewhere' ) ### UPDATE!
+            success = upload_to_spider( tarfiles, spider_location='disk/surveys/' )
+            cal_success = cal_success + success 
+
     elif task == 'target_VLBI':
         ## flocs-run linc target
         cal_solutions = os.path.join( fielddir, 'LINC-cal_solutions.h5' )
@@ -693,17 +703,24 @@ def cleanup_step(field, fieldobsid):
             os.system('rm -r {:s}'.format(os.path.join(field_datadir,'setup/L*MS')))
         os.system('rmdir {:s}'.format(field_procdir) )
 
-def do_verify(field):
-    tarfile = glob.glob(field+'*tgz')[0]
+def upload_to_spider( tarfiles, spider_location='disk/surveys/' ):
     macaroon_dir = os.getenv('MACAROON_DIR')
-    macaroon = glob.glob(os.path.join(macaroon_dir,'*lofarvlbi_upload.conf'))[0]
+    macaroon = glob.glob(os.path.join(macaroon_dir,'*maca_lofarvlbi.conf'))[0]
     rc = RClone( macaroon, debug=True )
     rc.get_remote()
-    d = rc.execute_live(['-P', 'copy', tarfile]+[rc.remote + '/' + 'disk/surveys/'])
-    if d['err'] or d['code']!=0:
-        update_status(field,'rclone failed')
-        print('Rclone failed for field {:s}'.format(field))
-    else:
+    spider_location = spider_location.lstrip('/').rstrip('/') + '/'
+    success = 0
+    for tarfile in tarfiles:
+        d = rc.execute_live(['-P', 'copy', tarfile]+[rc.remote + '/' + spider_location ])
+        if d['err'] or d['code']!=0:
+            success += 1
+            print('Rclone failed for file {:s}'.format(tarfile))
+    return(success)
+
+def do_verify(field):
+    tarfiles = glob.glob(field+'*tgz')
+    success = upload_to_spider( tarfiles, spider_location='disk/surveys' )
+    if success = 0:
         print('Tidying uploaded directory for',field)
         update_status(field,'Complete')
         ## delete the directory
@@ -712,6 +729,9 @@ def do_verify(field):
         os.system( 'rm -r {:s}'.format(os.path.join(basedir,field)))
         ## delete the tarfile
         os.system( 'rm {:s}.tgz'.format(field))
+    else:
+        print('Rclone failed for field {:s}'.format(field) )
+        update_status(field,'rclone failed')
 
 def archive_lbfield( field, operation='mv' ):
     if operation == 'copy':
@@ -782,17 +802,7 @@ def archive_lbfield( field, operation='mv' ):
     os.chdir(pwd)
 
     tarfiles = glob.glob(field+'*tgz')
-    macaroon_dir = os.getenv('MACAROON_DIR')
-    macaroon = glob.glob(os.path.join(macaroon_dir,'*lofarvlbi.conf'))[0]
-    rc = RClone( macaroon, debug=True )
-    rc.get_remote()
-    success = 0
-    for trf in tarfiles:
-        d = rc.execute_live(['-P', 'copy', trf]+[rc.remote + '/' + 'disk/fields/'])
-        if d['err'] or d['code']!=0:
-            success += 1
-            update_status(field,'rclone failed')
-            print('Rclone failed for field {:s}'.format(field))
+    success = upload_to_spider( tarfiles, spider_location='disk/fields/' )
     if success == 0:
         print('Tidying uploaded directory for',field)
         update_status(field,'Complete')
