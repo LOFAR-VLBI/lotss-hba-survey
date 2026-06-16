@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
 # clone of monitor.py to do LB target processing
-from __future__ import print_function
 from time import sleep
 import datetime
 from surveys_db import SurveysDB, tag_field, get_cluster
