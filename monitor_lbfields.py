@@ -25,6 +25,8 @@ from lbfields_utils import *
 ## threading
 from concurrent.futures import ProcessPoolExecutor
 
+## need to have some way to keep track of the future once a job is started .... Frits ran into issues with concurrent use and locks ... Matthijs to look into documentation
+
 
 #################################
 ## CLUSTER SPECIFICS - use environment variables
