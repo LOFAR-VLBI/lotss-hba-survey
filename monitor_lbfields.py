@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
 # clone of monitor.py to do LB target processing
-from __future__ import print_function
 from time import sleep
 import datetime
 from surveys_db import SurveysDB, tag_field, get_cluster
@@ -16,11 +15,9 @@ from download_file import download_file ## in ddf-pipeline/utils
 #import progress_bar
 from sdr_wrapper import SDR
 from reprocessing_utils import do_sdr_and_rclone_download, do_rclone_download
-from tasklist import *
-from calibrator_utils import *
-from plot_field import *
+from plot_field import generate_catalogues
 import numpy as np
-from lbfields_utils import *
+from lbfields_utils import update_status, get_local_obsid, collect_solutions, stage_field, do_download, do_unpack, get_linc_inputs, chunk_imagecat, check_field, cleanup_step, do_verify
 
 ## threading
 from concurrent.futures import ProcessPoolExecutor

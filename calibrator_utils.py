@@ -1,8 +1,6 @@
 # Check that a calibrator solution exists for a given observation
 # and do other operations on the LOFAR VLBI calibrators
 
-from __future__ import print_function
-from __future__ import division
 from rclone import RClone,splitlines
 from surveys_db import SurveysDB
 import os

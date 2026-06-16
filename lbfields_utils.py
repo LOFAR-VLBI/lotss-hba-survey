@@ -2,7 +2,6 @@
 
 # Utilities for monitor_lbfields and friends
 
-from __future__ import print_function
 from time import sleep
 import datetime
 from surveys_db import SurveysDB, tag_field, get_cluster
@@ -17,9 +16,8 @@ from download_file import download_file ## in ddf-pipeline/utils
 #import progress_bar
 from sdr_wrapper import SDR
 from reprocessing_utils import do_sdr_and_rclone_download, do_rclone_download
-from tasklist import *
-from calibrator_utils import *
-from plot_field import *
+from tasklist import set_task_list
+from calibrator_utils import get_linc, download_ddfpipeline_solutions, download_field_calibrators, unpack_calibrator_sols, compare_solutions
 import numpy as np
 
 

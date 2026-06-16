@@ -1,4 +1,3 @@
-from __future__ import print_function
 from surveys_db import SurveysDB
 
 # Utility functions for the LoTSS HBA survey, formerly part of surveys_db.py.

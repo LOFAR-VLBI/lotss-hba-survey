@@ -2,7 +2,6 @@
 
 # clone of monitor.py to do monitoring of full field reprocessing
 
-from __future__ import print_function
 from time import sleep
 import datetime
 from surveys_db import SurveysDB, tag_field, get_cluster
