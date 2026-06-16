@@ -253,8 +253,12 @@ def run_task( fieldobsid, task ):
         datadir = os.path.join( os.getenv('DATA_DIR'), fieldobsid, 'split-directions' )
         msfiles = glob.glob( os.path.join( datadir, 'ILTJ*' ) )
         with open( os.path.join( os.path.dirname(msfiles[0]), 'targetlist.txt' ), 'w' ) as f:
-            for msfile in msfiles:
-                f.write('{:s}\n'.format(msfile) )
+            with open( os.path.join( os.getenv('DATA_DIR'), field, 'recalibration_list.txt' ) as f2:
+                recal_list = f2.readlines[1:]
+                recal_targets = [line.split(',')[0] for line in recal_list]
+                for msfile in msfiles:
+                    if os.path.basename(msfile).split('_')[0] not in recal_targets:
+                        f.write('{:s}\n'.format(msfile) )
             with open('selfcal_{:s}.sh'.format(field),'w') as f:
                 f.write('#!/bin/bash -l\n\n')
                 f.write('#SBATCH --ntasks=1\n')
