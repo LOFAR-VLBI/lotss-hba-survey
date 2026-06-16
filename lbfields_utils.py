@@ -148,7 +148,7 @@ def get_calibrators( field ):
     obsids = get_obsids( field )
     ## stage the data
     for obsid in obsids:
-        ss = 'flocs-lta-search --sasid {:s} --freq_end=168. --get-surls --stage-products calibrator'.format(str(obsid))
+        ss = 'flocs-lta search-id --sasid {:s} --freq_end=168. --get-surls --stage-products calibrator'.format(str(obsid))
         os.system( ss )
         os.system('rm 20*log')
 
@@ -374,7 +374,7 @@ def stage_field( name, survey=None ):
         caldirs.append(caldir)
         if not os.path.exists(caldir):
             os.makedirs(caldir)
-            ss = 'flocs-lta-search --sasid {:s} --freq_end=168. --get-surls'.format(str(obsid))
+            ss = 'flocs-lta search-id --sasid {:s} --freq_end=168. --get-surls'.format(str(obsid))
             os.system( ss )
             os.system('mv {:s} {:s}'.format(srmfile, csrmfile))
             os.system('rm 20*log')
