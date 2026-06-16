@@ -253,27 +253,29 @@ def run_task( fieldobsid, task ):
         datadir = os.path.join( os.getenv('DATA_DIR'), fieldobsid, 'split-directions' )
         msfiles = glob.glob( os.path.join( datadir, 'ILTJ*' ) )
         with open( os.path.join( os.path.dirname(msfiles[0]), 'targetlist.txt' ), 'w' ) as f:
+            selfcal_count = 0
             with open( os.path.join( os.getenv('DATA_DIR'), field, 'recalibration_list.txt' ) as f2:
                 recal_list = f2.readlines[1:]
                 recal_targets = [line.split(',')[0] for line in recal_list]
                 for msfile in msfiles:
                     if os.path.basename(msfile).split('_')[0] not in recal_targets:
+                        selfcal_count += 1
                         f.write('{:s}\n'.format(msfile) )
-            with open('selfcal_{:s}.sh'.format(field),'w') as f:
-                f.write('#!/bin/bash -l\n\n')
-                f.write('#SBATCH --ntasks=1\n')
-                f.write('#SBATCH --cpus-per-task=32\n')
-                f.write('#SBATCH --job-name=selfcal\n')
-                f.write('#SBATCH -t 6:00:00\n\n')
-                f.write('DATADIR={:s}\n'.format(datadir))
-                f.write('OUTDIR={:s}/selfcal_${SLURM_ARRAY_TASK_ID}\n'.format(outdir))
-                f.write('TARGETINMS=`sed -n "${SLURM_ARRAY_TASK_ID}p" ${DATADIR}/targetlist.txt`\n')
-                f.write('mkdir -p ${OUTDIR}\n')
-                f.write('mv ${TARGETINMS ${OUTDIR}\n')
-                f.write('cd ${OUTDIR}\n')
-                f.write('TARGETMS=`ls -d ILTJ*`\n')
-                f.write("apptainer exec -B {:s},{:s} --no-home {:s} facetselfcal --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=32 > facet_selfcal.log 2>&1") 
-            os.system('sbatch {:s} --array=1-{:s}%10 selfcal_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),str(len(msfiles))) )
+        with open('selfcal_{:s}.sh'.format(field),'w') as f:
+            f.write('#!/bin/bash -l\n\n')
+            f.write('#SBATCH --ntasks=1\n')
+            f.write('#SBATCH --cpus-per-task=16\n')
+            f.write('#SBATCH --job-name=selfcal\n')
+            f.write('#SBATCH -t 6:00:00\n\n')
+            f.write('DATADIR={:s}\n'.format(datadir))
+            f.write('OUTDIR={:s}/selfcal_${SLURM_ARRAY_TASK_ID}\n'.format(outdir))
+            f.write('TARGETINMS=`sed -n "${SLURM_ARRAY_TASK_ID}p" ${DATADIR}/targetlist.txt`\n')
+            f.write('mkdir -p ${OUTDIR}\n')
+            f.write('mv ${TARGETINMS ${OUTDIR}\n')
+            f.write('cd ${OUTDIR}\n')
+            f.write('TARGETMS=`ls -d ILTJ*`\n')
+            f.write("apptainer exec -B {:s},{:s} --no-home {:s} facetselfcal --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=32 > facet_selfcal.log 2>&1") 
+        os.system('sbatch {:s} --array=1-{:s}%10 selfcal_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),str(selfcal_count)) )
     elif task == 'recal':
         pass
     elif task == 'inspection':
