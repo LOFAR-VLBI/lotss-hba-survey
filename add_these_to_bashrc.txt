@@ -26,7 +26,7 @@ export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-query
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_stager_api
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_lta-2.8.0
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/utils
-export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-hba-survey
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/autoPILOT
 export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/scripts
 
 ## flocs-runners
