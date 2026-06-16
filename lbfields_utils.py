@@ -10,6 +10,7 @@ import os
 import threading
 import glob
 import requests
+import subprocess
 import stager_access
 from rclone import RClone   ## DO NOT pip3 install --user python-rclone -- use https://raw.githubusercontent.com/mhardcastle/ddf-pipeline/master/utils/rclone.py
 from download_file import download_file ## in ddf-pipeline/utils
@@ -19,6 +20,9 @@ from reprocessing_utils import do_sdr_and_rclone_download, do_rclone_download
 from tasklist import set_task_list
 from calibrator_utils import get_linc, download_ddfpipeline_solutions, download_field_calibrators, unpack_calibrator_sols, compare_solutions
 import numpy as np
+
+from flocs_lta.lta_search import ObservationStager
+from stager_access import get_surls_requested, get_surls_online
 
 
 def update_status(name,status,stage_id=None,time=None,workdir=None,av=None,survey=None):
@@ -200,6 +204,43 @@ def run_task( fieldobsid, task ):
 
         ## use obsid and flocs-lta to stage and download calibrators - Frits
         ## run flocs-lta with outdir as calibrators_directory to put the calibrator data in, unpack and run dysco if necessary
+        stager = ObservationStager(get_surls=True)
+        stager.find_observation_by_sasid(
+            "ALL",
+            fieldobsid,
+            None,
+            120e6,
+            168e6,
+        )
+        stager.find_nearest_calibrators(2, 120e6, 168e6)
+        stage_id_calibrators = stager.stage_calibrators()
+        calibrator_staged = False
+        while True:
+            if len(get_surls_online(stage_id_calibrators)) == len(
+                get_surls_requested(stage_id_calibrators)
+            ):
+                calibrator_staged = True
+            else:
+                sleep(60)
+            if calibrator_staged:
+                cmd = (
+                    f"flocs-lta download --outdir {calibrator_directory} {stage_id_calibrators}"
+                )
+                with open(
+                    f"log_download_calibrators_{fieldobsid}.txt",
+                    "w",
+                ) as f_out, open(
+                    f"log_download_calibrators_{fieldobsid}.txt",
+                    "w",
+                ) as f_err:
+                    proc = subprocess.run(
+                        cmd, shell=True, text=True, stdout=f_out, stderr=f_err
+                    )
+                    if not proc.returncode:
+                        break
+                    else:
+                        raise RuntimeError("Something went wrong downloading")
+
 
         calibrator_dirs = glob.glob( calibrator_directory + '/*' )
         cal_success = 0
