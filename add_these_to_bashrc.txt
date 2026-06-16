@@ -1,0 +1,37 @@
+## installation
+pip install lofar-vlbi-plot
+pip install git+https://github.com/FLOCSoft/flocs-lta.git
+pip install git+https://github.com/FLOCSoft/flocs-runners.git
+
+export DDF_PIPELINE_CLUSTER=azimuth
+export DATA_DIR=/home/azimuth/surveys/
+export SCRATCH_DIR=/home/azimuth/surveys/
+export LOFAR_SINGULARITY=/home/azimuth/software/singularity/pull/vlbi-cwl_latest.sif
+export SOFTWAREDIR=/cosma/home/durham/dc-mora2/Software
+
+## cluster options
+export CLUSTER_OPTS="-A do011 -p cosma8-ska --output=${DATA_DIR}/logs/R-%x.%j.out" 
+export CLUSTER_OPTS="-A do011 -p cosma8-dine2 --output=${DATA_DIR}/logs/R-%x.%j.out" 
+export SLURM_QUEUES="cosma8-ska,cosma8-ska2,dine2"
+export SLURM_ACCOUNT="do011"
+
+## ddf-pipeline
+export DDFPIPELINE_SINGULARITY=/home/azimuth/software/singularity/ddf.sif
+export BOOTSTRAP_DIR=/cosma/home/durham/dc-mora2/Software/bootstrap
+export DDF_PIPELINE_INSTALL=/cosma/home/durham/dc-mora2/Software/ddf-pipeline
+
+## PYTHONPATH
+export SOFTWAREDIR=/home/azimuth/software
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-query
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_stager_api
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lofar_lta-2.8.0
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/utils
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/lotss-hba-survey
+export PYTHONPATH=${PYTHONPATH}:${SOFTWAREDIR}/ddf-pipeline/scripts
+
+## flocs-runners
+export APPTAINER_CACHEDIR=${SOFTWAREDIR}/singularity/cache
+export APPTAINER_PULLDIR=${SOFTWAREDIR}/singularity/pull
+export CWL_SINGULARITY_CACHE=${APPTAINER_CACHEDIR}
+export LINC_DATA_ROOT=${SOFTWAREDIR}/LINC
+export VLBI_DATA_ROOT=${SOFTWAREDIR}/pilot

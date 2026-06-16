@@ -13,6 +13,7 @@ def main( dicomodel ):
             d['GD']["Weight"]["SigmoidTaperOuterCutoff"]=0
             d['GD']["Weight"]["SigmoidTaperInnerRolloffStrength"]=0.5
             d['GD']["Weight"]["SigmoidTaperOuterRolloffStrength"]=0.5
+            d['GD']["Data"]["Dask"]=False
             with open('new.dicomodel','wb') as f:
                 pickle.dump(d,f)
             ## move the file to the original name

@@ -42,6 +42,11 @@ def update_status(name,status,stage_id=None,time=None,workdir=None,av=None,surve
 ##############################
 ## job management
 
+def run_apptainer( command ):
+    singularity = os.getenv('LOFAR_SNGULARITY')
+    bindpaths = ','.join([os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR')])
+    os.system( 'apptainer exec -B {:s} --no-home {:s} {:s}'.format( bindpaths, singularity, command ) )
+
 def restart_toil_job( field, obsid, workflow ):
     softwaredir = os.getenv('SOFTWAREDIR')
     slurmscript = os.path.join( softwaredir, 'lotss-hba-survey/slurm', 'run_{:s}.sh'.format( workflow.replace('HBA_','' ) ) )
@@ -95,6 +100,7 @@ def get_local_obsid( name ):
 ## finding and checking solutions 
 
 def collect_solutions_lhr( caldir ):
+    caldir = caldir.rstrip('/')
     survey=None
     obsid = os.path.basename(caldir)
     namedir = os.path.dirname(caldir)
@@ -109,17 +115,17 @@ def collect_solutions_lhr( caldir ):
         fld = sdb.cur.fetchall()
     calibrator_id = fld[0]['calibrator_id']
 
-    ## check if linc/prefactor 3 has been run
-    linc_check, macname = get_linc( obsid, caldir )    
-    if linc_check: 
+    ## get the calibrator solutions
+    result = download_field_calibrators(obsid,caldir)
+    if len(result[int(obsid)]) == 0:
+        ## need to re-run calibrator .... shouldn't ever be in this situation but here fore completeness
+        tasklist.append('calibrator')
+        tasklist.append('target_VLBI')
         tasklist.append('delay-calibration')
         tasklist.append('delay')
         tasklist.append('split-directions')
         tasklist.append('selfcal')
     else:
-        print('valid LINC solutions not found. Checking lb_calibrators.')
-        ## linc is not good
-        result = download_field_calibrators(obsid,caldir)
         solutions = unpack_calibrator_sols(caldir,result)
         if len(solutions) >= 1:
             print('One or more calibrator found, comparing solutions ...')
@@ -133,20 +139,123 @@ def collect_solutions_lhr( caldir ):
             tasklist.append('delay')
             tasklist.append('split-directions')
             tasklist.append('selfcal')
-        else:
-            ## need to re-run calibrator .... shouldn't ever be in this situation but here fore completeness
-            success = False
-            tasklist.append('calibrator')
-            tasklist.append('target_VLBI')
-            tasklist.append('delay-calibration')
-            tasklist.append('delay')
-            tasklist.append('split-directions')
-            tasklist.append('selfcal')
     if success:
         ## set the task list in the lb_operations table
         set_task_list(obsid,tasklist)
         ## set the status back to staging if no runtime errors
         update_status( name, 'Staging' )
+
+def get_calibrators( field ):
+    ## get obsids
+    obsids = get_obsids( field )
+    ## stage the data
+    for obsid in obsids:
+        ss = 'flocs-lta-search --sasid {:s} --freq_end=168. --get-surls --stage-products calibrator'.format(str(obsid))
+        os.system( ss )
+        os.system('rm 20*log')
+
+    all_uris = []
+    for obsid in obsids:
+        with open( 'srms_{:s}.txt'.format(obsid) ) as f:
+            lines = f.readlines()
+        uris = [ line.rstrip('\n') for line in lines ]
+        all_uris = all_uris + uris
+
+    ## submit as a single request to get the stage id
+
+    stage_status = stager_access.get_status(s)
+
+
+
+    ## download the data
+
+    ## run LINC calibrator
+    flocs_common_options = "--record-toil-stats --scheduler slurm --slurm-queue {:s} --slurm-account {:s} --runner toil --rundir {:s} --outdir {:s} ".format(os.getenv('SLURM_QUEUES'),os.getenv('SLURM_ACCOUNT'), rundir,outdir)
+    calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
+    calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s} {:s}'.format(calibrator_directory)
+    command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
+
+
+
+
+
+def run_task( fieldobsid, task ):
+
+    field = fieldobsid.split('/')[0]
+    rundir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid,'rundir')
+    outdir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid)
+    os.makedirs(rundir)
+
+    fielddir = os.path.join(os.getenv('DATA_DIR'),fieldobsid)
+
+    flocs_common_options = "--record-toil-stats --scheduler slurm --slurm-queue {:s} --slurm-account {:s} --runner toil --rundir {:s} --outdir {:s} ".format(os.getenv('SLURM_QUEUES'),os.getenv('SLURM_ACCOUNT'), rundir,outdir)
+
+
+    if task == 'calibrator':
+        ## need to stage and download calibrators
+
+
+
+        calibrator_directory = os.path.join(os.getenv('DATA_DIR'),fieldobsid,'calibrator')  ## doesn't actually exist for lotss-hr because we always just have calibrator solutions already
+        calibrator_options = '--slurm-time 24:00:00 --save-raw-solutions {:s}'.format(calibrator_directory)
+        command = 'flocs-run linc calibrator '+flocs_common_options+calibrator_options
+    elif task == 'target_VLBI':
+        ## flocs-run linc target
+        cal_solutions = os.path.join( fielddir, 'LINC-cal_solutions.h5' )
+        ## get skymodel -- update to get LoTSS skymodel
+        target_skymodel = os.path.join( fielddir, 'target.skymodel' )
+        mslist = glob.glob( os.path.join( fielddir, '*.MS' ) )
+        ss = "python3 {:s}/LINC/scripts/download_skymodel_target.py --Radius 5. --Source LOTSS --DoDownload True --targetname={:s} --fluxlimit 0.02 {:s} {:s}".format( softwaredir, field, mslist[0], target_skymodel )
+        run_apptainer( ss )
+        target_options = "--slurm-time 48:00:00 --output-fullres-data --min-unflagged-fraction 0.05 --offline-workers --target_skymodel {:s} --cal-solutions {:s} {:s}".format(cal_solutions,fielddir)
+        commmand = 'flocs-run linc target '+flocs_common_options+target_options
+    elif task == 'delay-calibration':
+        datadir = os.path.join( fielddir, 'HBA_target_VLBI', 'results' )
+        delaycal_options = "--slurm-time 48:00:00 --delay-calibrator {:s} --ms-suffix dp3concat {:s}".format(delay_catalogue,datadir)
+        command = 'flocs-run vlbi delay-calibration '+flocs_common_options+delaycal_options
+    elif task == 'delay':
+        update_status('DelayCheck')
+    elif task == 'split-directions':
+        ## NEED TO SORT OUT SELFCAL
+        datadir = os.path.join( fielddir, 'HBA_target_VLBI', 'results' )
+        delaycal_solutions = glob.glob( os.path.join( fielddir, delay-calibration, '*verified.h5' ) )[0]
+        nchunks = chunk_imagecat( fieldobsid )
+        commands = []
+        for i in range(nchunks):
+            image_catalogue = os.path.join(os.getenv('DATA_DIR'),field,'image_catalogue_{:s}.csv'.format(str(i+1)))
+            split_options = "--slurm-time 48:00:00 --delay-solset {:s} --source-catalogue {:s} --no-do-selfcal --ms-suffix dp3concat {:s}".format(delaycal_solutions,image_catalogue,datadir)
+            command = 'flocs-run vlbi split-directions '+flocs_common_options+split_options
+            commands.append(command)
+            ## sort out how to do multiprocessing
+    elif task == 'selfcal':
+        datadir = os.path.join( os.getenv('DATA_DIR'), fieldobsid, 'split-directions' )
+        msfiles = glob.glob( os.path.join( datadir, 'ILTJ*' ) )
+        with open( os.path.join( os.path.dirname(msfiles[0]), 'targetlist.txt' ), 'w' ) as f:
+            for msfile in msfiles:
+                f.write('{:s}\n'.format(msfile) )
+            with open('selfcal_{:s}.sh'.format(field),'w') as f:
+                f.write('#!/bin/bash -l\n\n')
+                f.write('#SBATCH --ntasks=1\n')
+                f.write('#SBATCH --cpus-per-task=32\n')
+                f.write('#SBATCH --job-name=selfcal\n')
+                f.write('#SBATCH -t 6:00:00\n\n')
+                f.write('DATADIR={:s}\n'.format(datadir))
+                f.write('OUTDIR={:s}/selfcal_${SLURM_ARRAY_TASK_ID}\n'.format(outdir))
+                f.write('TARGETINMS=`sed -n "${SLURM_ARRAY_TASK_ID}p" ${DATADIR}/targetlist.txt`\n')
+                f.write('mkdir -p ${OUTDIR}\n')
+                f.write('mv ${TARGETINMS ${OUTDIR}\n')
+                f.write('cd ${OUTDIR}\n')
+                f.write('TARGETMS=`ls -d ILTJ*`\n')
+                f.write("apptainer exec -B {:s},{:s} --no-home {:s} facetselfcal --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=32 > facet_selfcal.log 2>&1") 
+            os.system('sbatch {:s} --array=1-{:s}%10 selfcal_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),str(len(msfiles))) )
+
+
+    os.system(command)
+
+    
+        ## an example of the outdir, which here is J090630+693030
+        #(pyenv) [lofarvlbi-fsweijen@ui-01 J090630+693030]$ ls LINC_calibrator_L749280_2025_10_31-08_34_26/
+        #jobstore  logs_LINC_calibrator.tar  results_LINC_calibrator
 
 
 def collect_solutions( caldir ):
@@ -230,61 +339,76 @@ def collect_solutions( caldir ):
 ## staging
 
 def stage_field( name, survey=None ):
+    ## get the observation ids 
     with SurveysDB(survey=survey) as sdb:
-        idd = sdb.db_get('lb_fields',name)
-    ## currently srmfile is 'multi' if the field has more than one observation
-    srmfilename = idd['srmfile']
-    if srmfilename == 'multi':
-        with SurveysDB(survey=survey) as sdb:
-            sdb.cur.execute('select * from observations where field=%s',(name,))
-            obs = sdb.cur.fetchall()
-        obs_ok = 0
-        # check how many observations there really are, as opposed to failed on
-        for nobs in range(len(obs)):
-            if obs[nobs]['status'] in ['Archived','DI_Processed']:
-                obs_ok+=1
-                nobs_ok=nobs
-        # If really only 1 observation, construct its srmfile and proceed
-        if obs_ok==1:
-            srmfilename = 'https://public.spider.surfsara.nl/project/lotss/shimwell/LINC/srmfiles/srm%d.txt'%(obs[nobs_ok]['id'])
-            srmfilenames = [srmfilename]
-        else:
-            ## get the srm files and return an array
-            srmfilenames = []
-            for o in obs:
-                srmfilenames.append( 'https://public.spider.surfsara.nl/project/lotss/shimwell/LINC/srmfiles/srm%d.txt'%(o['id']) )
-    uris_to_stage = []
-    for srmfile in srmfilenames:
-        response = requests.get(srmfile) 
-        data = response.text
-        uris = data.rstrip('\n').split('\n')
-        uris_to_stage = uris_to_stage + uris
-    ## get obsid(s) and create a directory/directories
+        sdb.cur.execute('select * from observations where field=%s',(name,))
+        obs = sdb.cur.fetchall()
+    ## get the observation ids which are not failed
     obsids = []
-    for uri in uris_to_stage:
-        obsids.append(uri.split('/')[-2])
-    obsids = np.unique(obsids)
-    tmp = os.path.join(str(os.getenv('DATA_DIR')),str(name))
+    for nobs in range(len(obs)):
+        if obs[nobs]['status'] in ['Archived','DI_Processed']:
+            obsids.append(obs[nobs]['id'])
+    ## the field directory
+    fielddir = os.path.join(str(os.getenv('DATA_DIR')),str(name))
     caldirs = []
-    for obsid in obsids:    
-        caldir = os.path.join(tmp,obsid)
-        ## if directory already exists, it is possible that some things have already been staged
-        if os.path.exists(caldir):
-            tarfiles = glob.glob(os.path.join(caldir,'*.tar'))
-            trfs = [ val.split('/')[-1] for val in tarfiles ]
-            ## remove the already downloaded files from uris_to_stage ... 
-            idxs = [ i for i,val in enumerate(uris_to_stage) if val.split('/')[-1] in trfs ]
-            for idx in idxs:
-                uris_to_stage.pop(idx)
-        else:
-            os.makedirs(caldir) 
+    csrmfiles = []
+    for obsid in obsids:
+        caldir = os.path.join(fielddir, str(obsid))
+        srmfile = 'srms_{:s}.txt'.format(str(obsid))
+        csrmfile = os.path.join(caldir,srmfile)
+        csrmfiles.append(csrmfile)
         caldirs.append(caldir)
-    stage_id = stager_access.stage(uris_to_stage)
-    update_status(name, 'Staging', stage_id=stage_id )
+        if not os.path.exists(caldir):
+            os.makedirs(caldir)
+            ss = 'flocs-lta-search --sasid {:s} --freq_end=168. --get-surls'.format(str(obsid))
+            os.system( ss )
+            os.system('mv {:s} {:s}'.format(srmfile, csrmfile))
+            os.system('rm 20*log')
+        else:
+            if os.path.exists(csrmfile):
+                with open(csrmfile,'r') as f:
+                    lines = f.readlines()
+                uris = [ line.rstrip('\n') for line in lines ]
+                tarfiles = glob.glob(os.path.join(caldir,'*.tar'))
+                trfs = [ val.split('/')[-1] for val in tarfiles ]
+                ## remove the already downloaded files from uris_to_stage ...
+                idxs = [ i for i,val in enumerate(uris) if val.split('/')[-1] in trfs ]
+                for idx in idxs:
+                    uris.pop(idx)
+                with open(csrmfile,'w') as f:
+                    for uri in uris:
+                        f.write(uri)
+                        f.write('\n')
+            else:
+                print('Something bad happened for {:s}'.format(str(obsid)))
+    ## now collect everything that needs to be staged
+    uris = []
+    for csrmfile in csrmfiles:
+        with open(csrmfile,'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            uris.append(line.rstrip('\n'))
+
+    stage_id = stager_access.stage(uris)
+    update_status(name,'Staging', stage_id = stage_id )
     return(caldirs)
 
 ##############################
 ## downloading
+
+def make_macaroon_file( obsid, site, url, macdict ):
+    for mac in macdict:
+        try: 
+            bearer_token = mac[site]
+        except:
+            print('Token not found for {:s}'.format(site))
+    macname = os.path.join( os.getenv('PWD'), obsid + '.conf' )
+    with open( macname, 'w' ) as f:
+        f.write( 'type = webdav\n' )
+        f.write( 'vendor = other\n' )
+        f.write( 'url = {:s}\n'.format(url) )
+        f.write( 'bearer_token = {:s}'.format(bearer_token) )
+    return(macname)
 
 def do_download( name ):
     basedir = os.getenv('DATA_DIR')
@@ -293,60 +417,33 @@ def do_download( name ):
     with SurveysDB(readonly=True) as sdb:
         idd=sdb.db_get('lb_fields',name)
         stage_id = idd['staging_id']
-    ## get the surls from the stager API
     surls = stager_access.get_surls_online(stage_id)
+    macaroons = stager_access.get_macaroons(stage_id)
+    
     if len(surls) == 0:
         print('Something went wrong with the download for {:s} (staging id {:s})'.format(name,str(stage_id)))
         update_status(name,'Download failed')
     else:
-        ## assuming these are from the same project, but that's not necessarily true
-        project = surls[0].split('/')[-3]
-        ## get unique obsids
         tmp_obsids = [ val.split('/')[-2] for val in surls ]
         obsids = np.unique(tmp_obsids)
         all_tarfiles = []
         for obsid in obsids:
-            obsid_path = os.path.join(project,obsid)
             tmp = os.path.join(str(os.getenv('DATA_DIR')),str(name))
             caldir = os.path.join(tmp,obsid)
             obsid_surls = [ surl for surl in surls if obsid in surl ]
-            if 'psnc' in obsid_surls[0]:
-                print('Poznan download:',obsid_surls[0])
-                if 'NO_GRID' in os.environ:
-                    auth=None
-                    # Poznan requires username and password, which are in your .stagingrc
-                    # Rudimentary parsing of this needed...
-                    if os.path.isfile(os.getenv('HOME')+'/.stagingrc'):
-                        user=None
-                        password=None
-                        with open(os.getenv('HOME')+'/.stagingrc','r') as f:
-                            lines = f.readlines()
-                        for l in lines:
-                            if '=' in l:
-                                bits=l.split('=')
-                                if bits[0]=='user': user=bits[1].rstrip('\n')
-                                if bits[0]=='password': password=bits[1].rstrip('\n')
-                        if user and password:
-                            auth=(user,password)
-                        else:
-                            print('*** Warning: failed to parse stagingrc, download will fail ***')
-                    logfile=None
-                    prefix="https://lta-download.lofar.psnc.pl/lofigrid/SRMFifoGet.py?surl="
-                    for surl in obsid_surls:
-                        dest = os.path.join(caldir,os.path.basename(surl))
-                        if not os.path.isfile(dest):
-                            download_file(prefix+surl,dest,retry_partial=True,progress_bar=True,retry_size=1024,auth=auth)
-                        else:
-                            print(dest,'exists already, not downloading')
-                else:
-                    for surl in obsid_surls:
-                        dest = os.path.join(caldir,os.path.basename(surl))
-                        os.system('gfal-copy {:s} {:s} > {:s}_gfal.log 2>&1'.format(surl.replace('srm://lta-head.lofar.psnc.pl:8443','gsiftp://gridftp.lofar.psnc.pl:2811'),dest,name))
-                    os.system('rm {:s}_gfal.log'.format(name))
+            ## get project
+            project = surls[0].split('projects/')[-1].split('/')[0]
+            url = ':'.join(surls[0].split(':')[0:2]) + ':' + surls[0].split(':')[-1].split('/')[0]
+
             if 'juelich' in obsid_surls[0]:
-                ## rclone / macaroon - NOTE: project-specific macaroon generated; requires grid certificate
-                files = [ val.split('8443')[-1] for val in obsid_surls ]
-                mac_name = get_juelich_macaroon( name )
+                mac_name = make_macaroon_file( obsid, 'Juelich', url, macaroons )
+            elif 'psnc' in obsid_surls[0]:
+                mac_name = make_macaroon_file( obsid, 'Poznan', url, macaroons )
+            if 'surf' in obsid_surls[0]:
+                mac_name = make_macaroon_file( obsid, 'SURF', url, macaroons )
+
+            if os.path.exists(mac_name):
+                files = [ project+val.split(project)[-1] for val in obsid_surls ]
                 rc = RClone( mac_name, debug=True)
                 rc.get_remote()
                 for f in files:
@@ -354,25 +451,16 @@ def do_download( name ):
                 if d['err'] or d['code']!=0:
                     update_status(field,'rclone failed')
                     print('Rclone failed for field {:s}'.format(field))
-                os.system('rm *juelich.conf')
-            if 'sara' in obsid_surls[0]:
-                ## rclone / macaroon - NOTE: can use macaroon generated by someone else
-                files = [ os.path.basename(val) for val in obsid_surls ]
-                lta_macaroon = glob.glob(os.path.join(os.getenv('MACAROON_DIR'),'*LTA.conf'))[0]
-                rc = RClone( lta_macaroon, debug=True )
-                rc.get_remote()
-                #d = rc.multicopy(rc.remote+obsid_path,files,caldir) ## do not use as there are issues
-                for f in files:
-                    d = rc.execute(['-P','copy',rc.remote + os.path.join(obsid_path,f)]+[caldir]) 
-                if d['err'] or d['code']!=0:
-                    update_status(field,'rclone failed')
-                    print('Rclone failed for field {:s}'.format(name))
-            ## check that everything was downloaded
-            tarfiles = check_tarfiles( caldir )
-            all_tarfiles = all_tarfiles + tarfiles
-        if len(all_tarfiles) == len(surls):
-            print('Download successful for {:s}'.format(name) )
-            update_status(name,'Downloaded',stage_id=0)
+                os.system('rm {:s}'.format(mac_name))
+                ## check that everything was downloaded
+                tarfiles = check_tarfiles( caldir )
+                all_tarfiles = all_tarfiles + tarfiles
+                if len(all_tarfiles) == len(surls):
+                    print('Download successful for {:s}'.format(name) )
+                    update_status(name,'Downloaded',stage_id=0)
+            else:
+                print('Failed to create macaroon')
+                update_status(name,'Macaroon failed')
 
 def check_tarfiles( caldir ):
     trfs = glob.glob(os.path.join(caldir,'*tar'))
@@ -387,22 +475,6 @@ def check_tarfiles( caldir ):
     os.system('rm tmp.txt')    
     trfs = glob.glob(os.path.join(caldir,'*tar'))
     return(trfs)
-
-def get_juelich_macaroon( field ):
-    ## get project name
-    with SurveysDB(readonly=True) as sdb:
-        idd=sdb.db_get('lb_fields',field)
-        stage_id = idd['staging_id']
-    surls = stager_access.get_surls_online(stage_id)
-    tmp = surls[0].split('projects/')
-    proj_name = tmp[-1].split('/')[0]
-    ## generate voms-proxy-init
-    os.system( 'cat ~/macaroons/secret-file | voms-proxy-init --pwstdin --voms lofar:/lofar/user/sksp --valid 1680:0' )
-    #mac_name = os.path.join( os.getenv('MACAROON_DIR'), '{:s}_juelich'.format(proj_name) )
-    mac_name = '{:s}_juelich'.format(proj_name)
-    os.system( 'get-macaroon --url https://dcache-lofar.fz-juelich.de:2882/pnfs/fz-juelich.de/data/lofar/ops/projects/{:s} --duration P7D --proxy --permissions READ_METADATA,DOWNLOAD --ip 0.0.0.0/0 --output rclone {:s}'.format( proj_name, mac_name ) )
-    mac_name = mac_name + '.conf'
-    return( mac_name )
 
 ##############################
 ## unpacking
@@ -440,7 +512,6 @@ def dysco_compress_job(caldir):
 
 def do_unpack(field):
     update_status(field,'Unpacking')
-    do_dysco=False # Default should be false
     caldir = os.path.join(str(os.getenv('DATA_DIR')),field)
     obsdirs = glob.glob(os.path.join(caldir,'*'))
     tmp = [ val for val in obsdirs if os.path.isdir(val) ]
@@ -448,39 +519,24 @@ def do_unpack(field):
     for obsdir in obsdirs:
         ## get the tarfiles
         tarfiles = glob.glob(os.path.join(obsdir,'*tar'))
-        ## check if needs dysco compression
-        gb_filesize = os.path.getsize(tarfiles[0])/(1024*1024*1024)
-        ## update the above to be non-hacky
-        if gb_filesize > 40.:
-            do_dysco = True
-        if os.getenv("UNPACK_AS_JOB"):
-            # Logic for Unpacking Jobs - uses untar.sh and dysco.sh
-            for trf in tarfiles:
-                os.system('sbatch {:s} -W {:s}/lotss-hba-survey/slurm/untar.sh {:s} {:s}'.format(os.getenv('CLUSTER_OPTS'),os.getenv("SOFTWAREDIR"), trf, field))
-                #msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
-                #os.system( 'mv {:s} {:s}'.format(msname,obsdir))
-            if do_dysco:
-                dysco_success = dysco_compress_job(obsdir)
-        else:
-            for trf in tarfiles:
-                os.system( 'tar -xvf {:s} >> {:s}_unpack.log 2>&1'.format(trf,field) )
-                msname = '_'.join(os.path.basename(trf).split('_')[0:-1])
-                os.system( 'mv {:s} {:s}'.format(msname,obsdir))
-                if do_dysco:
-                    dysco_success = dysco_compress(obsdir,msname)
-                    ## ONLY FOR NOW
-                    if dysco_success:
-                        os.system('rm {:s}'.format(trf))
+        for trf in tarfiles:
+            with open('unpack_{:s}.sh'.format(field),'w') as f:
+                f.write('#!/bin/bash -l\n\n')
+                f.write('#SBATCH --ntasks=1\n')
+                f.write('#SBATCH --cpus-per-task=1\n')
+                f.write('#SBATCH --job-name=untar\n')
+                f.write('#SBATCH -t 4:00:00\n\n')
+                f.write('OUTDIR={:s}\n'.format(os.path.dirname(trf)))
+                f.write('cd ${OUTDIR}\n')
+                f.write("apptainer exec -B {:s},{:s} --no-home {:s} python3 {:s}/lotss-hba-survey/unpack_and_dysco_compress.py {:s}".format(os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR'),os.getenv('LOFAR_SINGULARITY'),os.getenv('SOFTWAREDIR'),trf))
+            os.system('sbatch {:s} -W unpack_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),field) )
     ## check that everything unpacked
     success = 0    
     for obsdir in obsdirs:
-        msfiles = glob.glob('{:s}/L*MS'.format(obsdir))
-        tarfiles = glob.glob( '{:s}/L*tar'.format(obsdir))
-        if len(msfiles) == len(tarfiles):
-            success = success + 1    
-            os.system('rm {:s}/*.tar'.format(obsdir))
+        failed = glob.glob(os.path.join(obsdir,'failed*txt'))
+        if len(failed) == 0:
+            success += 1
     if success == len(obsdirs):
-        os.system('rm {:s}_unpack.log'.format(field))
         update_status(field,'Unpacked')
     else:
         update_status(field,'Unpack failed')    
@@ -535,8 +591,9 @@ def chunk_imagecat( fieldobsid, numdirs=10, catname='image_catalogue.csv', nchun
             for myline in mylines:
                 f.write(myline)
         chunk = chunk + 1
-    cmd = 'sbatch -J split {:s} --array=1-{:s}%{:s} {:s}/lotss-hba-survey/slurm/run_split-directions.sh {:s}'.format(os.getenv('CLUSTER_OPTS'),str(nchunks),str(nchunkspertime),os.getenv('SOFTWAREDIR'),fieldobsid)
-    return( cmd )
+    
+    #cmd = 'sbatch -J split {:s} --array=1-{:s}%{:s} {:s}/lotss-hba-survey/slurm/run_split-directions.sh {:s}'.format(os.getenv('CLUSTER_OPTS'),str(nchunks),str(nchunkspertime),os.getenv('SOFTWAREDIR'),fieldobsid)
+    return( nchunks )
 
 
 
@@ -571,12 +628,14 @@ def check_field(field):
     fieldobsid = '{:s}/{:s}'.format(field,obsid)
     procdir = os.path.join(str(os.getenv('DATA_DIR')),'processing')
     outdirs = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid)))
-    finished = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid),'finished.txt') )
+    ## frits will change flocs-run to put log in output directory
+    finished = glob.glob(os.path.join(procdir,'{:s}*'.format(fieldobsid),'log*.txt') )
     success = []
     if len(outdirs) == len(finished) and len(finished) > 0:
         for outdir in outdirs:
             with open(os.path.join(outdir,'finished.txt'),'r') as f:
                 lines = f.readlines()
+            ## need to update based on flocs output
             if 'SUCCESS: Pipeline finished successfully' in lines[0]:
                 success.append(1)
             else:
@@ -590,6 +649,7 @@ def check_field(field):
             print('The following pipelines did not finish successfully, please check processing:')
             print( np.asarray(outdirs)[idx] )    
             success = 'Failed'
+            ## will also need to update this
             workflow, obsid = get_workflow_obsid(outdirs[0])
     else:
         ## the number of finished != number of directories - the process is still running
@@ -649,4 +709,95 @@ def do_verify(field):
         os.system( 'rm -r {:s}'.format(os.path.join(basedir,field)))
         ## delete the tarfile
         os.system( 'rm {:s}.tgz'.format(field))
+
+def archive_lbfield( field, operation='mv' ):
+    if operation == 'copy':
+        cmd = 'cp -r '
+    else:
+        cmd = 'mv '
+    ## make an output directory to put things in
+    fielddir = os.path.join( os.getenv('DATA_DIR'), field )
+    resultsdir = os.path.join( fielddir, 'archive' )
+    finaldir = os.path.join( fielddir, 'final' )
+    if not os.path.exists(resultsdir):
+        os.makedirs(resultsdir)
+        os.makedirs(finaldir)
+
+    ## catalogue files
+    catdir = os.path.join(fielddir, 'catalogue' )
+    catfiles = glob.glob( os.path.join( catdir, '*_catalogue.csv' ) )
+    catpngs = glob.glob( os.path.join( catdir, '*png' ) )
+    fits = glob.glob( os.path.join( catdir, 'fits' ) )
+    inspection = glob.glob( os.path.join( catdir, 'inspection' ) )
+    allfiles = catfiles + catpngs + fits + inspection 
+    for af in allfiles:
+        os.system( cmd + af + ' ' + finaldir + '/' )
+
+    obsids = get_local_obsid( field )
+    for obsid in obsids:
+        obsdir = os.path.join( fielddir, obsid )
+        results_obsdir = os.path.join( resultsdir, obsid )
+        os.makedirs( results_obsdir )
+        ## general solutions
+        lincsols = glob.glob( os.path.join( obsdir, 'LINC*h5' ) )
+        if os.path.exists( os.path.join( obsdir, 'delay-calibration' ) ):
+            deldir = 'delay-calibration'
+        else:
+            deldir = 'phaseup-concat'
+        tmp = glob.glob( os.path.join( obsdir, deldir, 'merged*verified.h5' ) )
+        tmp1 = glob.glob( os.path.join( obsdir, deldir, 'verified_solution_plots' ) )
+        tmp2 = glob.glob( os.path.join( obsdir, deldir, 'pipelinesols/ILTJ*dp3-concat' ) )
+        delcal = tmp + tmp1 + tmp2
+        allfiles = lincsols + delcal
+        for af in allfiles:
+            os.system( cmd + af + ' ' + results_obsdir + '/' )
+
+        ## selfcal solutions
+        sources1 = glob.glob( os.path.join( obsdir, 'selfcal', 'ILTJ*' ) )
+        sources2 = glob.glob( os.path.join( obsdir, 'selfcal', 'ILTJ*', 'first_selfcal' ) )
+        sources = sources1 + sources2
+        os.makedirs( os.path.join( results_obsdir, 'selfcal' ) )
+        for source in sources:
+            src = os.path.basename( source )
+            if src == 'first_selfcal':
+                src = os.path.join( os.path.basename( os.path.dirname( source ) ), 'first_selfcal')
+            src_outdir = os.path.join( results_obsdir, 'selfcal', src )
+            os.makedirs( src_outdir )
+            mslist = glob.glob( os.path.join( source, 'ILTJ*ms' ) )
+            h5parms = glob.glob( os.path.join( source, 'merged*h5' ) )
+            plots = glob.glob( os.path.join( source, 'plotlosoto*' ) )
+            mfs = glob.glob( os.path.join( source, '*MFS*fits' ) )
+            pngs = glob.glob( os.path.join( source, '*png' ) )
+            logs = glob.glob( os.path.join( source, '*log' ) )
+            srcfiles = mslist + h5parms + plots + mfs + pngs + logs
+            for sf in srcfiles:
+                os.system( cmd + sf + ' ' + src_outdir + '/' )
+    pwd = os.getenv('PWD')
+    os.chdir(os.getenv('DATA_DIR'))
+    os.system( 'tar cvzf {:s}_archive.tgz {:s}'.format(field, os.path.join(field,'archive')) )
+    os.system( 'tar cvzf {:s}_final.tgz {:s}'.format(field, os.path.join(field,'final')) )
+    os.chdir(pwd)
+
+    tarfiles = glob.glob(field+'*tgz')
+    macaroon_dir = os.getenv('MACAROON_DIR')
+    macaroon = glob.glob(os.path.join(macaroon_dir,'*lofarvlbi.conf'))[0]
+    rc = RClone( macaroon, debug=True )
+    rc.get_remote()
+    success = 0
+    for trf in tarfiles:
+        d = rc.execute_live(['-P', 'copy', trf]+[rc.remote + '/' + 'disk/fields/'])
+        if d['err'] or d['code']!=0:
+            success += 1
+            update_status(field,'rclone failed')
+            print('Rclone failed for field {:s}'.format(field))
+    if success == 0:
+        print('Tidying uploaded directory for',field)
+        update_status(field,'Complete')
+        ## delete the directory
+        os.system( 'rm -r {:s}'.format(os.path.join(procdir,field)))
+        ## delete the initial data
+        os.system( 'rm -r {:s}'.format(os.path.join(basedir,field)))
+    if success == 4:
+        ## delete the tarfile
+        os.system( 'rm {:s}*.tgz'.format(field))
 
