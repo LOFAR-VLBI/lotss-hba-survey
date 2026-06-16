@@ -49,7 +49,7 @@ def run_apptainer( command ):
 
 def restart_toil_job( field, obsid, workflow ):
     softwaredir = os.getenv('SOFTWAREDIR')
-    slurmscript = os.path.join( softwaredir, 'lotss-hba-survey/slurm', 'run_{:s}.sh'.format( workflow.replace('HBA_','' ) ) )
+    slurmscript = os.path.join( softwaredir, 'autoPILOT/slurm', 'run_{:s}.sh'.format( workflow.replace('HBA_','' ) ) )
     ## read the file
     with open( slurmscript, 'r' ) as f:
         lines = f.readlines()
@@ -506,7 +506,7 @@ def dysco_compress_job(caldir):
     success=True
     os.system('ls -d {:s}/*.MS > {:s}/myfiles.txt'.format(caldir,caldir))
     file_number = len(open("{:s}/myfiles.txt".format(caldir), "r").readlines())
-    command = 'sbatch -W --array=1-{:n}%5 {:s} {:s}/lotss-hba-survey/slurm/dysco.sh {:s}'.format(file_number,os.getenv('CLUSTER_OPTS'),os.getenv('SOFTWAREDIR'),caldir)
+    command = 'sbatch -W --array=1-{:n}%5 {:s} {:s}/autoPILOT/slurm/dysco.sh {:s}'.format(file_number,os.getenv('CLUSTER_OPTS'),os.getenv('SOFTWAREDIR'),caldir)
     if os.system(command):
         print("Something went wrong with the dysco compression job!")
         success = False
@@ -531,7 +531,7 @@ def do_unpack(field):
                 f.write('#SBATCH -t 4:00:00\n\n')
                 f.write('OUTDIR={:s}\n'.format(os.path.dirname(trf)))
                 f.write('cd ${OUTDIR}\n')
-                f.write("apptainer exec -B {:s},{:s} --no-home {:s} python3 {:s}/lotss-hba-survey/unpack_and_dysco_compress.py {:s}".format(os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR'),os.getenv('LOFAR_SINGULARITY'),os.getenv('SOFTWAREDIR'),trf))
+                f.write("apptainer exec -B {:s},{:s} --no-home {:s} python3 {:s}/autoPILOT/unpack_and_dysco_compress.py {:s}".format(os.getenv('SOFTWAREDIR'),os.getenv('DATA_DIR'),os.getenv('LOFAR_SINGULARITY'),os.getenv('SOFTWAREDIR'),trf))
             os.system('sbatch {:s} -W unpack_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),field) )
     ## check that everything unpacked
     success = 0    
@@ -595,7 +595,7 @@ def chunk_imagecat( fieldobsid, numdirs=10, catname='image_catalogue.csv', nchun
                 f.write(myline)
         chunk = chunk + 1
     
-    #cmd = 'sbatch -J split {:s} --array=1-{:s}%{:s} {:s}/lotss-hba-survey/slurm/run_split-directions.sh {:s}'.format(os.getenv('CLUSTER_OPTS'),str(nchunks),str(nchunkspertime),os.getenv('SOFTWAREDIR'),fieldobsid)
+    #cmd = 'sbatch -J split {:s} --array=1-{:s}%{:s} {:s}/autoPILOT/slurm/run_split-directions.sh {:s}'.format(os.getenv('CLUSTER_OPTS'),str(nchunks),str(nchunkspertime),os.getenv('SOFTWAREDIR'),fieldobsid)
     return( nchunks )
 
 
