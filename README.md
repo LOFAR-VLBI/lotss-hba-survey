@@ -1,4 +1,4 @@
-# lotss-hba-survey
+# autoPILOT
 Contains scripts used for running the HBA component of the LoTSS survey.
 
 # Requirements

@@ -121,7 +121,7 @@ def main(pointing):
     
     #Run LoTSS download
     lotss_dir = os.path.join(os.getenv('DATA_DIR'),pointing,'LoTSS')
-    lotss_dl_py = os.path.join(os.getenv('SOFTWAREDIR'),'lotss-hba-survey','lotss_dl_lhr.py')
+    lotss_dl_py = os.path.join(os.getenv('SOFTWAREDIR'),'autoPILOT','lotss_dl_lhr.py')
     subprocess.call(f"python3 {lotss_dl_py} --input {imcat_file} --outdir {lotss_dir}", shell=True)
 
     #Get list of sources - second glob is for the case of multi fields
