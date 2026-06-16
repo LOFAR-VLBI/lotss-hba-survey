@@ -180,10 +180,13 @@ def get_calibrators( field ):
 def run_task( fieldobsid, task ):
 
     field = fieldobsid.split('/')[0]
-    ## update to use scratch dir if set and different than data_dir/processing - Roland
-    rundir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid,'rundir')
+    if os.getenv("SCRATCH_DIR") is not None: #This should work, untested, fingers crossed
+        rundir = os.path.join(os.getenv('SCRATCH_DIR'),fieldobsid,'rundir')
+    else:
+        rundir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid,'rundir')
     outdir = os.path.join(os.getenv('DATA_DIR'),'processing',fieldobsid)
     os.makedirs(rundir)
+    os.makedirs(outdir)
 
     fielddir = os.path.join(os.getenv('DATA_DIR'),fieldobsid)
 
