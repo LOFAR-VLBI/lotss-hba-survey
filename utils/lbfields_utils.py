@@ -721,7 +721,7 @@ def upload_to_spider( tarfiles, spider_location='disk/surveys/' ):
 def do_verify(field):
     tarfiles = glob.glob(field+'*tgz')
     success = upload_to_spider( tarfiles, spider_location='disk/surveys' )
-    if success = 0:
+    if success == 0:
         print('Tidying uploaded directory for',field)
         update_status(field,'Complete')
         ## delete the directory
