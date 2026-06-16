@@ -273,11 +273,11 @@ def run_task( fieldobsid, task ):
     elif task == 'recal':
         pass
     elif task == 'inspection':
-        os.system('python3 {:s}/scripts/lotsshr_inspection.py {:s}'.format(os.getenv('SOFTWAREDIR'), field))
+        os.system('python3 {:s}/autoPILOT/scripts/lotsshr_inspection.py {:s}'.format(os.getenv('SOFTWAREDIR'), field))
     elif task == 'inspect':
         update_status('InspectCheck')
     elif task == 'catalogue':
-        os.system('python3 {:s}/scripts/lotsshr_catalog.py {:s}'.format(os.getenv('SOFTWAREDIR'), field))
+        os.system('python3 {:s}/autoPILOT/scripts/lotsshr_catalog.py {:s}'.format(os.getenv('SOFTWAREDIR'), field))
 
     os.system(command)
 
