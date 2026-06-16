@@ -208,7 +208,7 @@ def run_task( fieldobsid, task ):
         ## get skymodel -- update to get LoTSS skymodel
         target_skymodel = os.path.join( fielddir, 'target.skymodel' )
         mslist = glob.glob( os.path.join( fielddir, '*.MS' ) )
-        ss = "python3 {:s}/LINC/scripts/download_skymodel_target.py --Radius 5. --Source LOTSS --DoDownload True --targetname={:s} --fluxlimit 0.02 {:s} {:s}".format( softwaredir, field, mslist[0], target_skymodel )
+        ss = "python3 {:s}/autoPILOT/download_skymodel_target.py --Radius 5. --Source LOTSS --DoDownload True --targetname={:s} --fluxlimit 0.01 {:s} {:s}".format( softwaredir, field, mslist[0], target_skymodel )
         run_apptainer( ss )
         target_options = "--slurm-time 48:00:00 --output-fullres-data --min-unflagged-fraction 0.05 --offline-workers --target_skymodel {:s} --cal-solutions {:s} {:s}".format(cal_solutions,fielddir)
         commmand = 'flocs-run linc target '+flocs_common_options+target_options
