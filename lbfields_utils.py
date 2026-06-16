@@ -215,12 +215,17 @@ def run_task( fieldobsid, task ):
         stager.find_nearest_calibrators(2, 120e6, 168e6)
         stage_id_calibrators = stager.stage_calibrators()
         calibrator_staged = False
+        reference_date = datetime.now()
         while True:
             if len(get_surls_online(stage_id_calibrators)) == len(
                 get_surls_requested(stage_id_calibrators)
             ):
                 calibrator_staged = True
             else:
+                current_date = datetime.datetime.now()
+                time_passed = (current_date - reference_date).days()
+                if time_passed > 14:
+                    raise RuntimeError(f"Failed to fully stage observation after {time_passed} days. Probably best to restage and try again; aborting.")
                 sleep(60)
             if calibrator_staged:
                 cmd = (
@@ -230,7 +235,7 @@ def run_task( fieldobsid, task ):
                     f"log_download_calibrators_{fieldobsid}.txt",
                     "w",
                 ) as f_out, open(
-                    f"log_download_calibrators_{fieldobsid}.txt",
+                    f"log_download_calibrators_{fieldobsid}_err.txt",
                     "w",
                 ) as f_err:
                     proc = subprocess.run(
