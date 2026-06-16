@@ -123,6 +123,10 @@ def collect_solutions_lhr( caldir ):
         tasklist.append('delay')
         tasklist.append('split-directions')
         tasklist.append('selfcal')
+        tasklist.append('recal')
+        tasklist.append('inspection')
+        tasklist.append('inspect')
+        tasklist.append('catalogue')
     else:
         solutions = unpack_calibrator_sols(caldir,result)
         if len(solutions) >= 1:
@@ -137,6 +141,10 @@ def collect_solutions_lhr( caldir ):
             tasklist.append('delay')
             tasklist.append('split-directions')
             tasklist.append('selfcal')
+            tasklist.append('recal')
+            tasklist.append('inspection')
+            tasklist.append('inspect')
+            tasklist.append('catalogue')
     if success:
         ## set the task list in the lb_operations table
         set_task_list(obsid,tasklist)
@@ -262,7 +270,14 @@ def run_task( fieldobsid, task ):
                 f.write('TARGETMS=`ls -d ILTJ*`\n')
                 f.write("apptainer exec -B {:s},{:s} --no-home {:s} facetselfcal --configpath ${VLBIDIR}/target_selfcal_config.txt --targetcalILT=tec --ncpu-max-DP3solve=32 > facet_selfcal.log 2>&1") 
             os.system('sbatch {:s} --array=1-{:s}%10 selfcal_{:s}.sh'.format(os.getenv('CLUSTER_OPTS'),str(len(msfiles))) )
-
+    elif task == 'recal':
+        pass
+    elif task == 'inspection':
+        os.system('python3 {:s}/scripts/lotsshr_inspection.py {:s}'.format(os.getenv('SOFTWAREDIR'), field))
+    elif task == 'inspect':
+        update_status('InspectCheck')
+    elif task == 'catalogue':
+        os.system('python3 {:s}/scripts/lotsshr_catalog.py {:s}'.format(os.getenv('SOFTWAREDIR'), field))
 
     os.system(command)
 
