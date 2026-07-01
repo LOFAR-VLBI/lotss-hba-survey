@@ -254,6 +254,7 @@ def add_zero_source(tmp, ra, dec, component=False):
     tmp.add_column( [0.0], name='E_DC_Min' )
     tmp.add_column( [0.0], name='DC_PA' )
     tmp.add_column( [0.0], name='E_DC_PA' )
+    # TO DO: ACTUALLY USE IMAGE RMS VALUE HERE
     if component:
         tmp.add_column( [0.0], name='rms' )
     else:
