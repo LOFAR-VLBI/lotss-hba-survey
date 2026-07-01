@@ -230,7 +230,7 @@ def get_component(comp):
     tmp.add_column( [comp.code], name='S_Code' )
     return(tmp)
 
-def add_zero_source(tmp, ra, dec, component=False):
+def add_zero_source(tmp, ra, dec, rms, component=False):
     if component:
         tmp.add_column([0], name='gaus_num')
     tmp.add_column( [0],   name='source_id')
@@ -254,11 +254,10 @@ def add_zero_source(tmp, ra, dec, component=False):
     tmp.add_column( [0.0], name='E_DC_Min' )
     tmp.add_column( [0.0], name='DC_PA' )
     tmp.add_column( [0.0], name='E_DC_PA' )
-    # TO DO: ACTUALLY USE IMAGE RMS VALUE HERE
     if component:
-        tmp.add_column( [0.0], name='rms' )
+        tmp.add_column( [rms], name='rms' )
     else:
-        tmp.add_column( [0.0], name='Isl_rms' )
+        tmp.add_column( [rms], name='Isl_rms' )
     tmp.add_column( ['X'], name='S_Code' )
     return(tmp)
 
@@ -346,8 +345,8 @@ def get_source_info(source_file, source_name, lotss_info):
         for gauss in gaussians:
             component_table = vstack([component_table,get_component(gauss)])
     else:
-        source_table = add_zero_source(source_table, float(lotss_info['RA'][0]), float(lotss_info['DEC'][0]))
-        component_table = add_zero_source(component_table, float(lotss_info['RA'][0]), float(lotss_info['DEC'][0]), component=True)
+        source_table = add_zero_source(source_table, float(lotss_info['RA'][0]), float(lotss_info['DEC'][0]), imnoise)
+        component_table = add_zero_source(component_table, float(lotss_info['RA'][0]), float(lotss_info['DEC'][0]), imnoise, component=True)
     # source_table.add_column(source_name, index=0, name='Source_id' )
     return source_table, component_table 
 
@@ -725,7 +724,8 @@ def main( pointing, outdir='catalogue', processingdir='postprocessing', inspecti
         assoc_srcs = source_info[assoc_idx]
                 
         if len(assoc_srcs) == 0:
-            assoc_srcs = add_zero_source(Table(), float(lotss_info['RA'][0]), float(lotss_info['DEC'][0]))
+            imnoise = findrms(np.ndarray.flatten(fits.open(corrected_fitsfile)[0].data))
+            assoc_srcs = add_zero_source(Table(), float(lotss_info['RA'][0]), float(lotss_info['DEC'][0]), imnoise)
         else:
             #Modify and complete source-associated components
             assoc_srcs, assoc_comps = reorder_cat(assoc_srcs, assoc_comps)
